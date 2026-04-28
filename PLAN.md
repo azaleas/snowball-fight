@@ -290,10 +290,9 @@ snowthrowing/
 │   │   ├── lobby.js         # Lobby screen logic (DOM-based, no PixiJS)
 │   │   ├── game.js          # PixiJS app, game loop, character drawing, input
 │   │   ├── renderer.js      # Drawing functions (characters, forts, snowballs, HUD)
+│   │   ├── sounds.js        # Procedural sound effects (Web Audio API), mute toggle
 │   │   ├── network.js       # Socket.IO client wrapper
 │   │   └── constants.js     # Shared config (speeds, cooldowns, arena size)
-│   └── assets/
-│       └── sounds/          # Impact/throw SFX from freesound.org (CC0)
 └── README.md                # How to run locally + deploy instructions
 ```
 
@@ -313,10 +312,9 @@ All core visuals are **drawn programmatically** with PixiJS Graphics — no spri
 | HP bars | Drawn in code | Colored rectangles above players |
 | Aim arrow | Drawn in code | Line + arrowhead from player center |
 | UI (lobby, results) | HTML/CSS | DOM-based, no canvas needed for menus |
-| Impact SFX | freesound.org (CC0) | Snowball hit, throw whoosh, elimination thud |
-| UI SFX | Kenney Impact Sounds | Button clicks, game start chime |
+| Sound effects | Procedural (Web Audio API) | Throw whoosh, hit thud, elimination jingle, splat — no external files |
 
-**Total external file downloads: only a few small audio files.** Everything visual is code-generated, keeping the project lightweight and eliminating asset pipeline complexity.
+**Zero external file downloads.** Everything — visuals and audio — is code-generated, keeping the project lightweight and eliminating asset pipeline complexity. Sound is muted by default; players can toggle via in-game button (persisted in localStorage).
 
 ---
 
@@ -458,10 +456,10 @@ Share the Render URL with players. No DNS or SSL setup needed.
 - [x] Charge-to-throw mechanic (hold space for power)
 - [x] Center line boundary (teams can't cross)
 - [x] Player name persistence (localStorage)
-- [ ] Floating "-1" damage text on hit
-- [ ] "Packing snow" visual during throw cooldown
-- [ ] Sound effects: throw whoosh, hit splat, elimination thud (freesound.org CC0)
-- [ ] Footprint trails in snow (optional)
+- [x] Floating "-1" damage text on hit (rises and fades)
+- [x] "Packing snow" visual during throw cooldown (swirling snow particles)
+- [x] Sound effects: procedural Web Audio API (throw whoosh, hit thud, elimination wa-wa-waa, splat) — no external files
+- [x] Footprint trails in snow (fade over 3s, own player only)
 
 ### Phase 4: Deploy & Test
 - [ ] Push to GitHub

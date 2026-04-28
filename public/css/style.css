@@ -263,6 +263,24 @@ button:active {
   z-index: 10;
 }
 
+#mute-btn {
+  position: absolute;
+  bottom: 20px;
+  right: 16px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+#mute-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
 #cooldown-bar {
   height: 100%;
   background: #60a5fa;

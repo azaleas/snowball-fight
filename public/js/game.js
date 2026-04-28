@@ -3,6 +3,7 @@ import {
   ARENA_W, ARENA_H, PLAYER_RADIUS, AIM_ROTATE_SPEED, THROW_COOLDOWN,
   TEAM_CSS, TEAM_COLORS,
 } from "./constants.js";
+import { playThrow, playHit, playElimination, playSplat, toggleMute, isMuted } from "./sounds.js";
 import {
   drawCharacter, drawEliminated, drawAimArrow, drawSnowball,
   drawFort, drawHPBar, drawGround,
@@ -25,6 +26,17 @@ let splats = [];
 const MAX_SPLATS = 40;
 const SPLAT_LIFETIME = 5000;
 const SNOWBALL_ARC_HEIGHT = 40;
+
+let floatingTexts = [];
+const FLOAT_LIFETIME = 800;
+const FLOAT_RISE = 30;
+
+let footprints = [];
+const MAX_FOOTPRINTS = 60;
+const FOOTPRINT_LIFETIME = 3000;
+const FOOTPRINT_INTERVAL = 150;
+let lastFootprintTime = 0;
+let prevPlayerPos = null;
 
 // Player tracking for HUD
 let currentPlayers = [];
@@ -75,6 +87,14 @@ export function initGame(data, onGameOver) {
   document.getElementById("spectator-banner").classList.add("hidden");
   updateTeamHUD(data.players);
 
+  // Mute button
+  const muteBtn = document.getElementById("mute-btn");
+  muteBtn.textContent = isMuted() ? "Muted" : "Sound On";
+  muteBtn.onclick = () => {
+    const nowMuted = toggleMute();
+    muteBtn.textContent = nowMuted ? "Muted" : "Sound On";
+  };
+
   // Input
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("keyup", onKeyUp);
@@ -100,6 +120,10 @@ export function initGame(data, onGameOver) {
     if (target && attacker) {
       addKillFeedEntry(`${attacker.name} hit ${target.name} (${hpLeft} HP)`);
     }
+    if (target) {
+      addFloatingText(target.x, target.y, "-1", 0xff4444);
+      playHit();
+    }
     if (targetId === network.id) {
       flashScreen();
     }
@@ -110,6 +134,7 @@ export function initGame(data, onGameOver) {
     const killer = currentPlayers.find((p) => p.id === killerId);
     if (dead && killer) {
       addKillFeedEntry(`${killer.name} eliminated ${dead.name}!`);
+      playElimination();
     }
     if (playerId === network.id) {
       isSpectating = true;
@@ -119,6 +144,7 @@ export function initGame(data, onGameOver) {
 
   network.on("splat", ({ x, y }) => {
     addSplat(x, y);
+    playSplat();
   });
 
   network.on("game-over", (result) => {
@@ -170,6 +196,7 @@ function onKeyUp(e) {
     isCharging = false;
     lastThrowTime = Date.now();
     pendingThrow = power;
+    playThrow();
   }
 }
 
@@ -204,6 +231,35 @@ function renderState(state) {
   entityContainer.removeChildren();
   uiContainer.removeChildren();
 
+  const now = Date.now();
+
+  // Track own player for footprints
+  const me = state.players.find(p => p.id === network.id);
+  if (me && me.alive && prevPlayerPos) {
+    const dx = me.x - prevPlayerPos.x;
+    const dy = me.y - prevPlayerPos.y;
+    if (Math.abs(dx) + Math.abs(dy) > 1 && now - lastFootprintTime > FOOTPRINT_INTERVAL) {
+      addFootprint(me.x, me.y);
+      lastFootprintTime = now;
+    }
+  }
+  if (me) prevPlayerPos = { x: me.x, y: me.y };
+
+  // Draw footprints
+  footprints = footprints.filter(fp => now - fp.time < FOOTPRINT_LIFETIME);
+  for (const fp of footprints) {
+    const age = (now - fp.time) / FOOTPRINT_LIFETIME;
+    const g = new PIXI.Graphics();
+    g.beginFill(0xd8e2ec, 0.3 * (1 - age));
+    g.drawEllipse(-3, 0, 3, 5);
+    g.drawEllipse(3, 0, 3, 5);
+    g.endFill();
+    g.x = fp.x;
+    g.y = fp.y;
+    g.zIndex = -1;
+    entityContainer.addChild(g);
+  }
+
   // Draw eliminated players first (lower z)
   for (const p of state.players) {
     if (p.alive) continue;
@@ -228,6 +284,24 @@ function renderState(state) {
     // Aim arrow (only for self)
     if (p.id === network.id) {
       drawAimArrow(c, aimAngle);
+
+      // Packing snow visual during cooldown
+      const cooldownElapsed = now - lastThrowTime;
+      if (cooldownElapsed < THROW_COOLDOWN) {
+        const pct = cooldownElapsed / THROW_COOLDOWN;
+        const pg = new PIXI.Graphics();
+        const snowAngle = pct * Math.PI * 4;
+        for (let i = 0; i < 3; i++) {
+          const a = snowAngle + (i * Math.PI * 2) / 3;
+          const r = 10 + pct * 5;
+          const sx = Math.cos(a) * r;
+          const sy = Math.sin(a) * r + PLAYER_RADIUS * 0.5;
+          pg.beginFill(0xffffff, 0.6 * (1 - pct));
+          pg.drawCircle(sx, sy, 2);
+          pg.endFill();
+        }
+        c.addChild(pg);
+      }
     }
 
     // HP bar
@@ -248,7 +322,6 @@ function renderState(state) {
   }
 
   // Draw splats (snow marks on the ground)
-  const now = Date.now();
   splats = splats.filter(sp => now - sp.time < SPLAT_LIFETIME);
   for (const sp of splats) {
     const age = (now - sp.time) / SPLAT_LIFETIME;
@@ -301,6 +374,26 @@ function renderState(state) {
     g.y = s.y;
     entityContainer.addChild(g);
   }
+
+  // Draw floating damage texts
+  floatingTexts = floatingTexts.filter(ft => now - ft.time < FLOAT_LIFETIME);
+  for (const ft of floatingTexts) {
+    const age = (now - ft.time) / FLOAT_LIFETIME;
+    const t = new PIXI.Text("-1", {
+      fontSize: 16,
+      fontWeight: "bold",
+      fill: ft.color,
+      fontFamily: "Segoe UI, sans-serif",
+      stroke: 0xffffff,
+      strokeThickness: 3,
+    });
+    t.anchor.set(0.5);
+    t.x = ft.x;
+    t.y = ft.y - PLAYER_RADIUS - 20 - age * FLOAT_RISE;
+    t.alpha = 1 - age;
+    t.zIndex = 2000;
+    entityContainer.addChild(t);
+  }
 }
 
 function updateTeamHUD(players) {
@@ -346,6 +439,15 @@ function addSplat(x, y) {
   if (splats.length > MAX_SPLATS) splats.shift();
 }
 
+function addFloatingText(x, y, text, color) {
+  floatingTexts.push({ x, y, text, color, time: Date.now() });
+}
+
+function addFootprint(x, y) {
+  footprints.push({ x, y, time: Date.now() });
+  if (footprints.length > MAX_FOOTPRINTS) footprints.shift();
+}
+
 function addKillFeedEntry(text) {
   const feed = document.getElementById("kill-feed");
   const entry = document.createElement("div");
@@ -376,4 +478,7 @@ export function cleanup() {
   document.getElementById("team-info").innerHTML = "";
   Object.keys(keys).forEach((k) => delete keys[k]);
   splats = [];
+  floatingTexts = [];
+  footprints = [];
+  prevPlayerPos = null;
 }
