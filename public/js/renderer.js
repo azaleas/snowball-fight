@@ -298,14 +298,86 @@ export function drawSnowball(container, x, y) {
   return g;
 }
 
+function seededRandom(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 16807 + 0) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
 export function drawFort(container, fort) {
   const g = new PIXI.Graphics();
-  g.beginFill(FORT_COLOR, 0.7);
-  g.drawRoundedRect(fort.x - fort.w / 2, fort.y - fort.h / 2, fort.w, fort.h, 8);
+  const hw = fort.w / 2;
+  const hh = fort.h / 2;
+  const cx = fort.x;
+  const cy = fort.y;
+  const rand = seededRandom(Math.floor(cx * 1000 + cy));
+
+  // Generate jagged ice polygon points around the bounding box
+  const points = [];
+  const steps = 10 + Math.floor(rand() * 4);
+  for (let i = 0; i < steps; i++) {
+    const angle = (i / steps) * Math.PI * 2;
+    const baseX = Math.cos(angle) * hw;
+    const baseY = Math.sin(angle) * hh;
+    const jag = 0.7 + rand() * 0.5;
+    points.push(cx + baseX * jag, cy + baseY * jag);
+  }
+
+  // Shadow underneath
+  g.beginFill(0x000000, 0.08);
+  g.drawEllipse(cx, cy + hh * 0.4, hw * 0.9, hh * 0.4);
   g.endFill();
-  g.lineStyle(2, FORT_BORDER);
-  g.drawRoundedRect(fort.x - fort.w / 2, fort.y - fort.h / 2, fort.w, fort.h, 8);
+
+  // Main ice body
+  g.beginFill(0x9dd5e8, 0.75);
+  g.moveTo(points[0], points[1]);
+  for (let i = 2; i < points.length; i += 2) {
+    g.lineTo(points[i], points[i + 1]);
+  }
+  g.closePath();
+  g.endFill();
+
+  // Ice edge
+  g.lineStyle(1.5, 0x6db8d4, 0.6);
+  g.moveTo(points[0], points[1]);
+  for (let i = 2; i < points.length; i += 2) {
+    g.lineTo(points[i], points[i + 1]);
+  }
+  g.closePath();
   g.lineStyle(0);
+
+  // Ice spikes on top (2-3 jagged peaks)
+  const spikeCount = 2 + Math.floor(rand() * 2);
+  for (let i = 0; i < spikeCount; i++) {
+    const sx = cx - hw * 0.5 + rand() * hw;
+    const spikeH = 8 + rand() * 12;
+    const spikeW = 4 + rand() * 6;
+    g.beginFill(0xc4eaf5, 0.8);
+    g.moveTo(sx - spikeW / 2, cy - hh * 0.5);
+    g.lineTo(sx + rand() * 3 - 1, cy - hh * 0.5 - spikeH);
+    g.lineTo(sx + spikeW / 2, cy - hh * 0.5);
+    g.closePath();
+    g.endFill();
+  }
+
+  // Highlight / shine streaks
+  g.beginFill(0xffffff, 0.25);
+  g.drawEllipse(cx - hw * 0.2, cy - hh * 0.2, hw * 0.3, hh * 0.15);
+  g.endFill();
+  g.beginFill(0xffffff, 0.15);
+  g.drawEllipse(cx + hw * 0.15, cy + hh * 0.1, hw * 0.2, hh * 0.1);
+  g.endFill();
+
+  // Small crack lines
+  g.lineStyle(1, 0x7fc8de, 0.3);
+  const crackX = cx - hw * 0.1 + rand() * hw * 0.2;
+  g.moveTo(crackX, cy - hh * 0.3);
+  g.lineTo(crackX + 6, cy);
+  g.lineTo(crackX + 2, cy + hh * 0.2);
+  g.lineStyle(0);
+
   container.addChild(g);
   return g;
 }

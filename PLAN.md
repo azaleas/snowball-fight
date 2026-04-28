@@ -331,6 +331,7 @@ Replaced the original colored-circle characters with code-drawn snowmen. After e
 - **Server**: Added `moving` flag to player state broadcast for potential animation use
 - **Throwing arm animation**: When throwing, the snowman's arm swings out in the aim direction (team 0 throws with left arm, team 1 with right arm — facing toward the opponent's side)
 - **Snowball charging animation**: While holding space, both arms come together and roll a growing snowball in front of the body. Ball size reflects charge power (0–100%)
+- **Ice glacier forts**: Replaced rounded rectangles with jagged ice/glacier shapes — irregular polygons with ice spikes, shine highlights, crack lines, and shadows. Each fort has a unique shape via seeded random (consistent across redraws)
 - **No external assets**: Everything remains 100% code-drawn with PixiJS Graphics
 
 ---
