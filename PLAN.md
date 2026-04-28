@@ -430,7 +430,7 @@ Share the Render URL with players. No DNS or SSL setup needed.
 - [x] Player name persistence (localStorage)
 - [x] Floating "-1" damage text on hit (rises and fades)
 - [x] "Packing snow" visual during throw cooldown (swirling snow particles)
-- [x] Sound effects: procedural Web Audio API (throw whoosh, hit thud, elimination wa-wa-waa, splat) — no external files
+- [x] Sound effects: procedural Web Audio API (throw whoosh, hit thud, elimination wa-wa-waa, splat, friendly fire buzzer, snow footsteps) — no external files
 - [x] Footprint trails in snow (fade over 3s, own player only)
 
 ### Phase 4: Deploy & Test

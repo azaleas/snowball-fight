@@ -150,6 +150,43 @@ export function playFriendlyFire() {
   osc2.stop(ctx.currentTime + duration);
 }
 
+let lastFootstepTime = 0;
+const FOOTSTEP_INTERVAL = 220;
+
+export function playFootstep() {
+  if (muted) return;
+  const now = Date.now();
+  if (now - lastFootstepTime < FOOTSTEP_INTERVAL) return;
+  lastFootstepTime = now;
+
+  const ctx = getCtx();
+  const duration = 0.08 + Math.random() * 0.04;
+
+  const bufferSize = Math.floor(ctx.sampleRate * duration);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    const env = 1 - i / bufferSize;
+    data[i] = (Math.random() * 2 - 1) * env * env;
+  }
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 600 + Math.random() * 400;
+  filter.Q.value = 0.8;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.06 + Math.random() * 0.02, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+  source.connect(filter).connect(gain).connect(ctx.destination);
+  source.start();
+  source.stop(ctx.currentTime + duration);
+}
+
 export function playSplat() {
   if (muted) return;
   const ctx = getCtx();

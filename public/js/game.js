@@ -3,7 +3,7 @@ import {
   ARENA_W, ARENA_H, PLAYER_RADIUS, AIM_ROTATE_SPEED, THROW_COOLDOWN,
   TEAM_CSS, TEAM_COLORS,
 } from "./constants.js";
-import { playThrow, playHit, playElimination, playSplat, playFriendlyFire, toggleMute, isMuted } from "./sounds.js";
+import { playThrow, playHit, playElimination, playSplat, playFriendlyFire, playFootstep, toggleMute, isMuted } from "./sounds.js";
 import {
   drawCharacter, drawEliminated, drawAimArrow, drawSnowball,
   drawFort, drawHPBar, drawGround,
@@ -219,6 +219,8 @@ function sendInput() {
 
   if (keys["q"]) aimAngle -= AIM_ROTATE_SPEED;
   if (keys["e"]) aimAngle += AIM_ROTATE_SPEED;
+
+  if (mx !== 0 || my !== 0) playFootstep();
 
   const msg = {
     move: { x: mx, y: my },
