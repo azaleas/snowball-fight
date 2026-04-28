@@ -14,7 +14,7 @@ The game aims to capture the **Snowcraft feel**: isometric 3/4 top-down view, cl
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| Runtime | Bun | Faster than Node, built-in HTTP server (no Express needed), fewer deps |
+| Runtime | Bun (with Node http module) | Faster than Node, uses Node's createServer for Socket.IO compatibility |
 | Frontend Rendering | PixiJS (v7, via CDN) | Sprite management, z-sorting, tinting, animation — handles rendering grunt work |
 | Frontend Logic | Vanilla JS | No framework needed — lobby is simple DOM, game is all PixiJS canvas |
 | Real-time | Socket.IO | Proven WebSocket lib, auto-reconnect, rooms |
@@ -85,34 +85,41 @@ All game visuals are drawn programmatically using PixiJS Graphics — no externa
 | A / Left Arrow | Move left |
 | D / Right Arrow | Move right |
 | Q / E | Rotate aim direction counter-clockwise / clockwise |
-| Space | Throw snowball in current aim direction |
+| Space (tap) | Quick short throw in aim direction |
+| Space (hold + release) | Charge throw — longer hold = farther/faster throw (0.8s full charge) |
 
 - Movement is straightforward — WASD maps directly to screen directions
 - An **aim arrow** extends from the player showing current throw direction
 - The aim arrow rotates smoothly with Q/E at a comfortable speed
-- Cooldown of **~1.5 seconds** between throws ("packing snow" — character briefly bends down)
+- **Charge-to-throw**: hold Space to charge (power bar fills green → red), release to throw. Full charge reaches entire arena.
+- Cooldown of **~0.6 seconds** between throws — fast enough for rapid fire
 - Movement speed is constant; players can move while the aim arrow stays in its last direction
 - Players cannot move through snow forts (collision)
+- **Teams cannot cross the center line** (Snowcraft style) — dashed line marks the boundary
 
 ---
 
 ## Arena Design
 
 ```
-+--------------------------------------------------+
-|                                                    |
-|     [Fort]              [Fort]                     |
-|                                                    |
-|          [Fort]                    [Fort]          |
-|   BLUE                                RED          |
-|   TEAM        [Fort]  [Fort]         TEAM          |
-|   SPAWN                              SPAWN         |
-|          [Fort]                    [Fort]          |
-|                                                    |
-|     [Fort]              [Fort]                     |
-|                                                    |
-+--------------------------------------------------+
++-------------------------:-------------------------+
+|                         :                         |
+|     [Fort]              :          [Fort]         |
+|                         :                         |
+|          [Fort]         :              [Fort]     |
+|   BLUE                  :                  RED    |
+|   TEAM        [Fort]  [Fort]           TEAM       |
+|   SPAWN                 :              SPAWN      |
+|          [Fort]         :              [Fort]     |
+|                         :                         |
+|     [Fort]              :          [Fort]         |
+|                         :                         |
++-------------------------:-------------------------+
+         BLUE SIDE     center     RED SIDE
+                       line
 ```
+
+- Dashed center line separates team territories — players cannot cross
 
 - Roughly symmetrical layout — fair for both teams
 - Teams spawn on opposite sides
@@ -137,11 +144,15 @@ All game visuals are drawn programmatically using PixiJS Graphics — no externa
 
 ### Snowballs
 
-- Travel in a **straight line** from the player in the aim direction (Snowcraft style — no arc)
-- Speed: ~3x player movement speed
-- Disappear on: hitting an enemy, hitting a snow fort, or traveling max distance (~60% of arena width)
+- Travel in a **straight line** from the player in the aim direction
+- **Visual arc**: snowballs rise and fall in a parabolic arc as they travel (visual only — collision stays on the ground plane). They scale up slightly at peak height with a shadow underneath that spreads as the ball goes higher.
+- **Charge-based power**: tap Space for a short/slow throw, hold Space for a long/fast throw
+  - Speed range: 18 (tap) to 30 (full charge)
+  - Distance range: ~15% of arena (tap) to ~120% of arena (full charge — covers the whole map)
+- Disappear on: hitting an enemy, hitting a snow fort, or traveling max distance
+- **Splat marks**: when a snowball lands (miss, hit fort, or hit player), a white/grey elliptical splat appears on the ground and fades out over 5 seconds (max 40 on screen)
 - **No friendly fire** — snowballs pass through teammates
-- Visually: small white filled circle (~8px) with a light grey shadow underneath
+- Cooldown: 0.6s between throws
 
 ### Snow Forts (Cover)
 
@@ -170,11 +181,11 @@ All game visuals are drawn programmatically using PixiJS Graphics — no externa
 
 ## Funny Team Name Generator
 
-Random combination: `[Adjective] [Noun]` — adult comedy tone.
+Random combination: `The [Adjective] [Noun]` — Futurama-style absurdist/bureaucratic humor. Silly and safe, not raunchy.
 
-**Adjectives:** Frostbitten, Absolutely Hammered, Ice Cold, Polar, Snowblind, Frigid, Rock Hard, Slippery, Barely Clothed, Stiff, Half-Frozen, Unhinged, Throbbing, Moist, Stone Cold, Fully Loaded, Raw Dogging, Butt-Naked, Lubed Up, Dangerously Horny
+**Adjectives:** Bureaucratically Frozen, Technically Alive, Mildly Defrosted, Suspiciously Warm, Mostly Harmless, Legally Distinct, Emotionally Unavailable, Slightly Damp, Nominally Competent, Aggressively Mediocre, Tragically Hip, Weaponized, Sentient, Hyper-Caffeinated, Reluctantly Heroic, Suspiciously Cheerful, Gloriously Incompetent, Cosmically Unlucky, Diplomatically Immune, Existentially Confused
 
-**Nouns:** Chads, Snowflakes, Pounders, Yetis, Icicles, Penguins, Flurries, Avalanches, Dumplings, Numb Nuts, Snowblowers, Frostbites, Shivers, Swingers, Cougars, Sugar Daddies, MILFs, Hot Messes, Mouth Breathers, Degenerates
+**Nouns:** Bureaucrats, Snowbots, Penguins, Ice Weasels, Yetis, Zambonis, Icicle Merchants, Frost Lobsters, Snow Owls, Huskies, Polar Bears, Slush Puppies, Avalanche Enthusiasts, Fridge Magnets, Snowplow Pilots, Arctic Foxes, Tundra Nerds, Blizzard Wizards, Frozen Accountants, Glacier Inspectors
 
 Pairs are picked without replacement within a game (no duplicate words across both team names).
 
@@ -436,13 +447,19 @@ Share the Render URL with players. No DNS or SSL setup needed.
 - [x] Win condition check + game-over event
 
 ### Phase 3: Polish
-- [ ] Unique hat/accessory per avatar (12 styles drawn in code)
-- [ ] Hit feedback (flash white, knockback, floating "-1" text)
+- [x] Unique hat/accessory per avatar (12 styles drawn in code)
+- [x] Hit feedback (screen flash on hit)
+- [x] Kill feed / event log
+- [x] Results screen with stats (MVP, eliminations, first blood)
+- [x] Play again flow
+- [x] Arena decoration (snow dots, dashed center line)
+- [x] Snowball arc animation (parabolic rise/fall with shadow)
+- [x] Splat marks where snowballs land (fade over 5s)
+- [x] Charge-to-throw mechanic (hold space for power)
+- [x] Center line boundary (teams can't cross)
+- [x] Player name persistence (localStorage)
+- [ ] Floating "-1" damage text on hit
 - [ ] "Packing snow" visual during throw cooldown
-- [ ] Kill feed / event log
-- [ ] Results screen with stats (MVP, eliminations, first blood)
-- [ ] Play again flow
-- [ ] Arena decoration (scattered snowflake dots, tree triangles at edges)
 - [ ] Sound effects: throw whoosh, hit splat, elimination thud (freesound.org CC0)
 - [ ] Footprint trails in snow (optional)
 

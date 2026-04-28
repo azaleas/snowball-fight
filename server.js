@@ -43,17 +43,19 @@ const FORT_LAYOUT = [
 
 // ── Funny team names ──
 const ADJECTIVES = [
-  "Frostbitten", "Absolutely Hammered", "Ice Cold", "Polar", "Snowblind",
-  "Frigid", "Rock Hard", "Slippery", "Barely Clothed", "Stiff",
-  "Half-Frozen", "Unhinged", "Throbbing", "Moist", "Stone Cold",
-  "Fully Loaded", "Raw Dogging", "Butt-Naked", "Lubed Up", "Dangerously Horny",
+  "Bureaucratically Frozen", "Technically Alive", "Mildly Defrosted", "Suspiciously Warm",
+  "Mostly Harmless", "Legally Distinct", "Emotionally Unavailable", "Slightly Damp",
+  "Nominally Competent", "Aggressively Mediocre", "Tragically Hip", "Weaponized",
+  "Sentient", "Hyper-Caffeinated", "Reluctantly Heroic", "Suspiciously Cheerful",
+  "Gloriously Incompetent", "Cosmically Unlucky", "Diplomatically Immune", "Existentially Confused",
 ];
 
 const NOUNS = [
-  "Chads", "Snowflakes", "Pounders", "Yetis", "Icicles",
-  "Penguins", "Flurries", "Avalanches", "Dumplings", "Numb Nuts",
-  "Snowblowers", "Frostbites", "Shivers", "Swingers", "Cougars",
-  "Sugar Daddies", "MILFs", "Hot Messes", "Mouth Breathers", "Degenerates",
+  "Bureaucrats", "Snowbots", "Penguins", "Ice Weasels", "Yetis",
+  "Zambonis", "Icicle Merchants", "Frost Lobsters", "Snow Owls", "Huskies",
+  "Polar Bears", "Slush Puppies", "Avalanche Enthusiasts", "Fridge Magnets",
+  "Snowplow Pilots", "Arctic Foxes", "Tundra Nerds", "Blizzard Wizards",
+  "Frozen Accountants", "Glacier Inspectors",
 ];
 
 const HAT_STYLES = [
@@ -201,8 +203,11 @@ function tick() {
     s.y += Math.sin(s.angle) * s.speed;
     s.dist += s.speed;
 
+    s.progress = s.dist / s.maxDist;
+
     // Out of bounds or max distance
     if (s.x < 0 || s.x > ARENA_W || s.y < 0 || s.y > ARENA_H || s.dist > s.maxDist) {
+      io.emit("splat", { x: s.x, y: s.y });
       snowballs.splice(i, 1);
       continue;
     }
@@ -216,6 +221,7 @@ function tick() {
       }
     }
     if (hitFort) {
+      io.emit("splat", { x: s.x, y: s.y });
       snowballs.splice(i, 1);
       continue;
     }
@@ -246,6 +252,7 @@ function tick() {
       }
     }
     if (hitPlayer) {
+      io.emit("splat", { x: s.x, y: s.y });
       snowballs.splice(i, 1);
     }
   }
@@ -260,7 +267,7 @@ function tick() {
     });
   }
 
-  const snowballStates = snowballs.map(s => ({ x: s.x, y: s.y, team: s.team }));
+  const snowballStates = snowballs.map(s => ({ x: s.x, y: s.y, team: s.team, progress: s.progress }));
 
   io.emit("state", { players: playerStates, snowballs: snowballStates });
 }

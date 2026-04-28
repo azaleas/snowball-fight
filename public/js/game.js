@@ -21,6 +21,10 @@ const keys = {};
 let aimAngle = 0;
 let chargeStart = 0;
 let isCharging = false;
+let splats = [];
+const MAX_SPLATS = 40;
+const SPLAT_LIFETIME = 5000;
+const SNOWBALL_ARC_HEIGHT = 40;
 
 // Player tracking for HUD
 let currentPlayers = [];
@@ -80,6 +84,7 @@ export function initGame(data, onGameOver) {
   network.socket.off("hit");
   network.socket.off("elimination");
   network.socket.off("game-over");
+  network.socket.off("splat");
 
   // Network events
   network.on("state", (state) => {
@@ -110,6 +115,10 @@ export function initGame(data, onGameOver) {
       isSpectating = true;
       document.getElementById("spectator-banner").classList.remove("hidden");
     }
+  });
+
+  network.on("splat", ({ x, y }) => {
+    addSplat(x, y);
   });
 
   network.on("game-over", (result) => {
@@ -238,24 +247,54 @@ function renderState(state) {
     entityContainer.addChild(c);
   }
 
-  // Draw snowballs
-  for (const s of state.snowballs) {
+  // Draw splats (snow marks on the ground)
+  const now = Date.now();
+  splats = splats.filter(sp => now - sp.time < SPLAT_LIFETIME);
+  for (const sp of splats) {
+    const age = (now - sp.time) / SPLAT_LIFETIME;
+    const alpha = 0.4 * (1 - age);
     const g = new PIXI.Graphics();
-    g.zIndex = s.y;
-    // Shadow
-    g.beginFill(0x000000, 0.12);
-    g.drawEllipse(0, 4, 5, 2.5);
+    g.beginFill(0xffffff, alpha);
+    g.drawEllipse(0, 0, 18 + Math.random() * 4, 10 + Math.random() * 3);
     g.endFill();
-    // Ball
+    g.beginFill(0xe8eef4, alpha * 0.6);
+    g.drawEllipse(-6, 3, 9, 5);
+    g.drawEllipse(7, -2, 7, 4);
+    g.drawEllipse(2, 5, 6, 3);
+    g.endFill();
+    g.x = sp.x;
+    g.y = sp.y;
+    g.zIndex = sp.y - 2;
+    entityContainer.addChild(g);
+  }
+
+  // Draw snowballs with arc
+  for (const s of state.snowballs) {
+    const p = s.progress || 0;
+    const arcHeight = Math.sin(p * Math.PI) * SNOWBALL_ARC_HEIGHT;
+    const scale = 1 + Math.sin(p * Math.PI) * 0.3;
+
+    const g = new PIXI.Graphics();
+    g.zIndex = s.y + 1000;
+
+    // Shadow on the ground (spreads as ball goes higher)
+    const shadowScale = 1 + arcHeight / 30;
+    const shadowAlpha = 0.15 - (arcHeight / SNOWBALL_ARC_HEIGHT) * 0.08;
+    g.beginFill(0x000000, Math.max(0.04, shadowAlpha));
+    g.drawEllipse(0, arcHeight, 5 * shadowScale, 2.5 * shadowScale);
+    g.endFill();
+
+    // Ball (drawn offset upward by arc height)
     g.beginFill(0xffffff);
-    g.drawCircle(0, 0, 8);
+    g.drawCircle(0, -arcHeight, 8 * scale);
     g.endFill();
     g.lineStyle(1, 0xdddddd);
-    g.drawCircle(0, 0, 8);
+    g.drawCircle(0, -arcHeight, 8 * scale);
     g.lineStyle(0);
+
     // Highlight
     g.beginFill(0xffffff, 0.9);
-    g.drawCircle(-2, -2, 2);
+    g.drawCircle(-2, -arcHeight - 2, 2);
     g.endFill();
 
     g.x = s.x;
@@ -302,6 +341,11 @@ function updateCooldownBar() {
   }
 }
 
+function addSplat(x, y) {
+  splats.push({ x, y, time: Date.now() });
+  if (splats.length > MAX_SPLATS) splats.shift();
+}
+
 function addKillFeedEntry(text) {
   const feed = document.getElementById("kill-feed");
   const entry = document.createElement("div");
@@ -331,4 +375,5 @@ export function cleanup() {
   document.getElementById("kill-feed").innerHTML = "";
   document.getElementById("team-info").innerHTML = "";
   Object.keys(keys).forEach((k) => delete keys[k]);
+  splats = [];
 }
