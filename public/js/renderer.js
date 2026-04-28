@@ -295,6 +295,15 @@ export function drawGround(container, w, h) {
     g.endFill();
   }
 
+  // Center line (dashed effect)
+  const cx = w / 2;
+  g.lineStyle(2, 0xbbccdd, 0.5);
+  for (let y = 0; y < h; y += 16) {
+    g.moveTo(cx, y);
+    g.lineTo(cx, y + 8);
+  }
+  g.lineStyle(0);
+
   container.addChild(g);
   return g;
 }

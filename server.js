@@ -11,11 +11,14 @@ const TICK_MS = 1000 / TICK_RATE;
 const ARENA_W = 1200;
 const ARENA_H = 800;
 const PLAYER_RADIUS = 20;
-const PLAYER_SPEED = 4;
+const PLAYER_SPEED = 7;
 const SNOWBALL_RADIUS = 8;
-const SNOWBALL_SPEED = 12;
-const SNOWBALL_MAX_DIST = ARENA_W * 0.6;
-const THROW_COOLDOWN = 1500;
+const SNOWBALL_SPEED_MIN = 18;
+const SNOWBALL_SPEED_MAX = 30;
+const SNOWBALL_MAX_DIST_MIN = ARENA_W * 0.15;
+const SNOWBALL_MAX_DIST_MAX = ARENA_W * 1.2;
+const THROW_COOLDOWN = 600;
+const THROW_CHARGE_TIME = 800; // ms to reach full charge
 const MAX_HP = 5;
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 11;
@@ -156,6 +159,14 @@ function clampPlayerToArenaAndForts(p) {
   p.x = Math.max(PLAYER_RADIUS, Math.min(ARENA_W - PLAYER_RADIUS, p.x));
   p.y = Math.max(PLAYER_RADIUS, Math.min(ARENA_H - PLAYER_RADIUS, p.y));
 
+  // Teams can't cross the center line
+  const center = ARENA_W / 2;
+  if (p.team === 0) {
+    p.x = Math.min(p.x, center - PLAYER_RADIUS);
+  } else {
+    p.x = Math.max(p.x, center + PLAYER_RADIUS);
+  }
+
   for (const fort of FORT_LAYOUT) {
     if (circleRect(p.x, p.y, PLAYER_RADIUS, fort.x - FORT_W / 2, fort.y - FORT_H / 2, FORT_W, FORT_H)) {
       const dx = p.x - fort.x;
@@ -186,12 +197,12 @@ function tick() {
   // Update snowballs
   for (let i = snowballs.length - 1; i >= 0; i--) {
     const s = snowballs[i];
-    s.x += Math.cos(s.angle) * SNOWBALL_SPEED;
-    s.y += Math.sin(s.angle) * SNOWBALL_SPEED;
-    s.dist += SNOWBALL_SPEED;
+    s.x += Math.cos(s.angle) * s.speed;
+    s.y += Math.sin(s.angle) * s.speed;
+    s.dist += s.speed;
 
     // Out of bounds or max distance
-    if (s.x < 0 || s.x > ARENA_W || s.y < 0 || s.y > ARENA_H || s.dist > SNOWBALL_MAX_DIST) {
+    if (s.x < 0 || s.x > ARENA_W || s.y < 0 || s.y > ARENA_H || s.dist > s.maxDist) {
       snowballs.splice(i, 1);
       continue;
     }
@@ -413,10 +424,15 @@ io.on("connection", (socket) => {
       const now = Date.now();
       if (now - p.lastThrow >= THROW_COOLDOWN) {
         p.lastThrow = now;
+        const power = Math.max(0, Math.min(1, data.power || 0));
+        const speed = SNOWBALL_SPEED_MIN + power * (SNOWBALL_SPEED_MAX - SNOWBALL_SPEED_MIN);
+        const maxDist = SNOWBALL_MAX_DIST_MIN + power * (SNOWBALL_MAX_DIST_MAX - SNOWBALL_MAX_DIST_MIN);
         snowballs.push({
           x: p.x + Math.cos(p.aimAngle) * (PLAYER_RADIUS + SNOWBALL_RADIUS + 2),
           y: p.y + Math.sin(p.aimAngle) * (PLAYER_RADIUS + SNOWBALL_RADIUS + 2),
           angle: p.aimAngle,
+          speed,
+          maxDist,
           team: p.team,
           ownerId: socket.id,
           dist: 0,

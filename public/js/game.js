@@ -19,6 +19,8 @@ let isSpectating = false;
 // Input state
 const keys = {};
 let aimAngle = 0;
+let chargeStart = 0;
+let isCharging = false;
 
 // Player tracking for HUD
 let currentPlayers = [];
@@ -129,16 +131,37 @@ function scaleCanvas() {
   app.view.style.height = `${ARENA_H * scale}px`;
 }
 
+const THROW_CHARGE_TIME = 800;
+let pendingThrow = null;
+
 function onKeyDown(e) {
-  keys[e.key.toLowerCase()] = true;
-  if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(e.key.toLowerCase()) ||
-      ["w", "a", "s", "d", "q", "e"].includes(e.key.toLowerCase())) {
+  const key = e.key === " " ? "space" : e.key.toLowerCase();
+  keys[key] = true;
+  if (["arrowup", "arrowdown", "arrowleft", "arrowright"].includes(e.key.toLowerCase()) ||
+      ["w", "a", "s", "d", "q", "e", "space"].includes(key)) {
     e.preventDefault();
+  }
+  // Start charging on first space press (ignore repeats)
+  if (key === "space" && !e.repeat && !isCharging && !isSpectating) {
+    const now = Date.now();
+    if (now - lastThrowTime >= THROW_COOLDOWN) {
+      isCharging = true;
+      chargeStart = now;
+    }
   }
 }
 
 function onKeyUp(e) {
-  keys[e.key.toLowerCase()] = false;
+  const key = e.key === " " ? "space" : e.key.toLowerCase();
+  keys[key] = false;
+  // Release space = throw with accumulated power
+  if (key === "space" && isCharging) {
+    const chargeTime = Date.now() - chargeStart;
+    const power = Math.min(chargeTime / THROW_CHARGE_TIME, 1);
+    isCharging = false;
+    lastThrowTime = Date.now();
+    pendingThrow = power;
+  }
 }
 
 function sendInput() {
@@ -153,20 +176,19 @@ function sendInput() {
   if (keys["q"]) aimAngle -= AIM_ROTATE_SPEED;
   if (keys["e"]) aimAngle += AIM_ROTATE_SPEED;
 
-  let throwing = false;
-  if (keys[" "]) {
-    const now = Date.now();
-    if (now - lastThrowTime >= THROW_COOLDOWN) {
-      throwing = true;
-      lastThrowTime = now;
-    }
-  }
-
-  network.emit("input", {
+  const msg = {
     move: { x: mx, y: my },
     aimAngle,
-    throwing,
-  });
+    throwing: false,
+  };
+
+  if (pendingThrow !== null) {
+    msg.throwing = true;
+    msg.power = pendingThrow;
+    pendingThrow = null;
+  }
+
+  network.emit("input", msg);
 }
 
 function renderState(state) {
@@ -266,9 +288,18 @@ function updateTeamHUD(players) {
 function updateCooldownBar() {
   const bar = document.getElementById("cooldown-bar");
   const elapsed = Date.now() - lastThrowTime;
-  const pct = Math.min(elapsed / THROW_COOLDOWN, 1);
-  bar.style.width = `${pct * 100}%`;
-  bar.style.background = pct >= 1 ? "#60a5fa" : "#f59e0b";
+  const cooldownPct = Math.min(elapsed / THROW_COOLDOWN, 1);
+
+  if (isCharging) {
+    // Show charge power
+    const chargeTime = Date.now() - chargeStart;
+    const chargePct = Math.min(chargeTime / THROW_CHARGE_TIME, 1);
+    bar.style.width = `${chargePct * 100}%`;
+    bar.style.background = chargePct >= 1 ? "#ef4444" : "#22c55e";
+  } else {
+    bar.style.width = `${cooldownPct * 100}%`;
+    bar.style.background = cooldownPct >= 1 ? "#60a5fa" : "#f59e0b";
+  }
 }
 
 function addKillFeedEntry(text) {

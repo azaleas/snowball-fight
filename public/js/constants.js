@@ -3,7 +3,7 @@ export const ARENA_H = 800;
 export const PLAYER_RADIUS = 20;
 export const SNOWBALL_RADIUS = 8;
 export const MAX_HP = 5;
-export const THROW_COOLDOWN = 1500;
+export const THROW_COOLDOWN = 600;
 export const AIM_ROTATE_SPEED = 0.06;
 
 export const TEAM_COLORS = [0x2563eb, 0xdc2626];
