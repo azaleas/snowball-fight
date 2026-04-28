@@ -318,58 +318,18 @@ All core visuals are **drawn programmatically** with PixiJS Graphics — no spri
 
 ---
 
-## Future Graphics Upgrade (Phase 5)
+## Graphics Upgrade (Phase 5) — COMPLETE
 
-The code-drawn visuals (circles + shapes) are the v1 approach — fast to build, zero asset dependencies. Once gameplay is solid, upgrade to proper sprite art from free asset sources.
+Replaced the original colored-circle characters with code-drawn snowmen. After evaluating external sprite packs ("Winter Story" by Brosnya on OpenGameArt, LPC character generators, itch.io packs), we decided that free sprite assets didn't fit well — mismatched art styles, background removal issues, and limited character variety. Code-drawn snowmen turned out to be the best approach: zero external dependencies, full control, and perfectly thematic.
 
-### What to Upgrade
+### What Changed
 
-| Element | Current (v1) | Upgrade Target |
-|---------|-------------|----------------|
-| Characters | Colored circles + hat shapes | Sprite sheets with 4-directional walk animations |
-| Snow forts | Rounded rectangles | Detailed ice/snow wall sprites |
-| Arena ground | Flat gradient | Tiled snow texture with subtle variation |
-| Snowballs | White circles | Textured snowball with motion trail |
-| Trees/decoration | Triangles | Proper snow-covered tree sprites |
-| Elimination | Grey squashed ellipse | Character lying flat / snow angel sprite |
-
-### Free Asset Sources (Ranked)
-
-1. **OpenGameArt.org** — https://opengameart.org
-   Largest open-license game art repo. Licenses vary (CC0, CC-BY, CC-BY-SA). The LPC (Liberated Pixel Cup) collection has excellent top-down characters with walk cycles. Best for: characters, tilesets, environment.
-
-2. **itch.io Free Assets** — https://itch.io/game-assets/free
-   Huge variety, quality varies. Check license per pack. Best for: finding niche themed packs (winter, snow).
-
-3. **Kenney.nl** — https://kenney.nl
-   All CC0. No winter-specific isometric/top-down packs, but good for UI elements, particles, and general-purpose sprites.
-
-4. **CraftPix.net Freebies** — https://craftpix.net/freebies/
-   Professionally polished top-down tilesets and characters. Proprietary-permissive license (free, no resale). Best for: high-quality environment tiles, UI.
-
-5. **GameArt2D.com** — https://www.gameart2d.com/freebies.html
-   Free character sprites and tilesets including winter/Christmas themes. Royalty-free. Best for: themed props and backgrounds.
-
-6. **Game-icons.net** — https://game-icons.net
-   4000+ SVG/PNG icons, CC-BY 3.0. Best for: HUD icons (health, snowball count, team indicators).
-
-7. **Universal LPC Spritesheet Generator** — https://sanderfrenken.github.io/Universal-LPC-Spritesheet-Character-Generator/
-   Web tool to compose top-down characters with customizable clothing, hair, skin. CC-BY-SA 3.0. Best for: generating unique per-player avatars with team-colored outfits.
-
-### Specific Winter/Snow Packs Found
-
-- **"Winter Story" by Brosnya** (OpenGameArt) — CC0. Top-down snow/soil tiles, 4-directional character walk animations, craftable items. Directly applicable.
-- **"Christmas Village Asset Pack" by murphysdad** (OpenGameArt) — CC0. Top-down 4-direction characters, snow tilesets, trees, snowman.
-- **"LPC Winter Tiles"** (OpenGameArt) — CC-BY-SA 3.0. Snow-covered pine trees and winter ground tiles. Pairs with the LPC Character Generator.
-
-### Upgrade Strategy
-
-The renderer is isolated in `renderer.js` — swapping from Graphics-drawn shapes to loaded sprites means changing the draw functions, not the game logic. PixiJS handles both Graphics and Sprites uniformly, so the entity container / z-sorting / HUD code stays the same.
-
-1. Pick a consistent art style from one source (mixing styles looks jarring)
-2. Replace `renderer.js` draw functions one element at a time (characters first, then forts, then ground)
-3. Add spritesheet loading to `game.js` init
-4. Keep the code-drawn version as a fallback if sprites fail to load
+- **Characters → Snowmen**: Two stacked white snowballs (body + head), coal dot eyes, carrot nose, coal dot smile, stick arms with twig branches, black top hat with colored band, colored scarf
+- **12 unique accent colors**: Each player gets a distinct scarf + hat band color (red, green, blue, orange, purple, teal, yellow, pink, cyan, lime, coral, violet) — mapped from the existing `hat` style field
+- **Eliminated state → Melted puddle**: Flat snow puddle with fallen hat, scarf remnants, coal eyes, and carrot nose
+- **Team identification**: No team coloring on characters — the center line boundary makes teams clear
+- **Server**: Added `moving` flag to player state broadcast for potential animation use
+- **No external assets**: Everything remains 100% code-drawn with PixiJS Graphics
 
 ---
 
@@ -467,3 +427,12 @@ Share the Render URL with players. No DNS or SSL setup needed.
 - [ ] Test with real players on multiple devices
 - [ ] Tweak balance: movement speed, throw speed, cooldown, arena size, fort placement
 - [ ] Mobile considerations: if needed, add on-screen touch controls (stretch goal)
+
+### Phase 5: Graphics Upgrade — Snowman Characters
+- [x] Evaluated external sprite packs (Winter Story, LPC, itch.io) — poor fit
+- [x] Designed code-drawn snowman character (body, head, hat, scarf, arms, face)
+- [x] 12 unique accent colors per player (scarf + hat band)
+- [x] Melted puddle eliminated state (fallen hat, scarf, coal, carrot)
+- [x] Added `moving` flag to server state broadcast
+- [x] Removed unused sprite assets and sprite loader module
+- [x] Updated PLAN.md documentation

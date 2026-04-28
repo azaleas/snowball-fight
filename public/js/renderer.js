@@ -3,165 +3,128 @@ import {
   FORT_COLOR, FORT_BORDER, SNOWBALL_COLOR, SNOWBALL_SHADOW, MAX_HP,
 } from "./constants.js";
 
-const HAT_DRAW = {
-  beanie(g, color) {
-    g.beginFill(color);
-    g.drawRoundedRect(-10, -PLAYER_RADIUS - 10, 20, 14, 4);
-    g.endFill();
-    g.beginFill(0xffffff);
-    g.drawCircle(0, -PLAYER_RADIUS - 10, 5);
-    g.endFill();
-  },
-  tophat(g, color) {
-    g.beginFill(0x222222);
-    g.drawRect(-8, -PLAYER_RADIUS - 20, 16, 20);
-    g.endFill();
-    g.beginFill(0x222222);
-    g.drawRect(-12, -PLAYER_RADIUS - 4, 24, 4);
-    g.endFill();
-  },
-  earmuffs(g, color) {
-    g.beginFill(color);
-    g.drawCircle(-PLAYER_RADIUS + 2, -6, 7);
-    g.drawCircle(PLAYER_RADIUS - 2, -6, 7);
-    g.endFill();
-    g.beginFill(0x444444);
-    g.drawRect(-PLAYER_RADIUS + 5, -PLAYER_RADIUS - 4, PLAYER_RADIUS * 2 - 10, 3);
-    g.endFill();
-  },
-  santa(g, color) {
-    g.beginFill(0xcc0000);
-    g.moveTo(-12, -PLAYER_RADIUS + 2);
-    g.lineTo(0, -PLAYER_RADIUS - 18);
-    g.lineTo(12, -PLAYER_RADIUS + 2);
-    g.closePath();
-    g.endFill();
-    g.beginFill(0xffffff);
-    g.drawCircle(0, -PLAYER_RADIUS - 18, 5);
-    g.endFill();
-    g.beginFill(0xffffff);
-    g.drawRect(-14, -PLAYER_RADIUS, 28, 5);
-    g.endFill();
-  },
-  crown(g, color) {
-    g.beginFill(0xffd700);
-    g.moveTo(-12, -PLAYER_RADIUS);
-    g.lineTo(-10, -PLAYER_RADIUS - 14);
-    g.lineTo(-4, -PLAYER_RADIUS - 6);
-    g.lineTo(0, -PLAYER_RADIUS - 16);
-    g.lineTo(4, -PLAYER_RADIUS - 6);
-    g.lineTo(10, -PLAYER_RADIUS - 14);
-    g.lineTo(12, -PLAYER_RADIUS);
-    g.closePath();
-    g.endFill();
-  },
-  wizard(g, color) {
-    g.beginFill(0x6b21a8);
-    g.moveTo(-14, -PLAYER_RADIUS + 2);
-    g.lineTo(0, -PLAYER_RADIUS - 25);
-    g.lineTo(14, -PLAYER_RADIUS + 2);
-    g.closePath();
-    g.endFill();
-    g.beginFill(0xffd700);
-    g.moveTo(0, -PLAYER_RADIUS - 15);
-    g.lineTo(3, -PLAYER_RADIUS - 10);
-    g.lineTo(0, -PLAYER_RADIUS - 5);
-    g.lineTo(-3, -PLAYER_RADIUS - 10);
-    g.closePath();
-    g.endFill();
-  },
-  cowboy(g, color) {
-    g.beginFill(0x8B4513);
-    g.drawEllipse(0, -PLAYER_RADIUS, 22, 5);
-    g.endFill();
-    g.beginFill(0x8B4513);
-    g.drawRoundedRect(-10, -PLAYER_RADIUS - 12, 20, 12, 3);
-    g.endFill();
-  },
-  beret(g, color) {
-    g.beginFill(color);
-    g.drawEllipse(2, -PLAYER_RADIUS - 2, 14, 7);
-    g.endFill();
-  },
-  viking(g, color) {
-    g.beginFill(0x888888);
-    g.drawRoundedRect(-12, -PLAYER_RADIUS - 6, 24, 10, 3);
-    g.endFill();
-    g.beginFill(0xeeeeee);
-    g.moveTo(-16, -PLAYER_RADIUS - 6);
-    g.quadraticCurveTo(-14, -PLAYER_RADIUS - 20, -8, -PLAYER_RADIUS - 6);
-    g.endFill();
-    g.beginFill(0xeeeeee);
-    g.moveTo(16, -PLAYER_RADIUS - 6);
-    g.quadraticCurveTo(14, -PLAYER_RADIUS - 20, 8, -PLAYER_RADIUS - 6);
-    g.endFill();
-  },
-  propeller(g, color) {
-    g.beginFill(color);
-    g.drawRoundedRect(-10, -PLAYER_RADIUS - 8, 20, 10, 4);
-    g.endFill();
-    g.beginFill(0x444444);
-    g.drawRect(-12, -PLAYER_RADIUS - 10, 24, 3);
-    g.endFill();
-    g.beginFill(0xff4444);
-    g.drawCircle(0, -PLAYER_RADIUS - 10, 3);
-    g.endFill();
-  },
-  pirate(g, color) {
-    g.beginFill(0x222222);
-    g.drawRoundedRect(-12, -PLAYER_RADIUS - 6, 24, 10, 2);
-    g.endFill();
-    g.beginFill(0x222222);
-    g.moveTo(-4, -PLAYER_RADIUS - 6);
-    g.lineTo(0, -PLAYER_RADIUS - 16);
-    g.lineTo(4, -PLAYER_RADIUS - 6);
-    g.closePath();
-    g.endFill();
-    g.beginFill(0xffffff);
-    g.drawRect(-2, -PLAYER_RADIUS - 14, 4, 3);
-    g.endFill();
-  },
-  chef(g, color) {
-    g.beginFill(0xffffff);
-    g.drawCircle(0, -PLAYER_RADIUS - 8, 14);
-    g.endFill();
-    g.beginFill(0xffffff);
-    g.drawRect(-12, -PLAYER_RADIUS - 2, 24, 4);
-    g.endFill();
-  },
+const SNOWMAN_COLORS = {
+  beanie:    0xe74c3c,
+  tophat:    0x2ecc71,
+  earmuffs:  0x3498db,
+  santa:     0xe67e22,
+  crown:     0x9b59b6,
+  wizard:    0x1abc9c,
+  cowboy:    0xf1c40f,
+  beret:     0xe91e63,
+  viking:    0x00bcd4,
+  propeller: 0x8bc34a,
+  pirate:    0xff7043,
+  chef:      0x7c4dff,
 };
+
+function getAccentColor(hat) {
+  return SNOWMAN_COLORS[hat] || 0xe74c3c;
+}
 
 export function drawCharacter(container, playerData) {
   const g = new PIXI.Graphics();
+  const accent = getAccentColor(playerData.hat);
 
   // Shadow
-  g.beginFill(0x000000, 0.15);
-  g.drawEllipse(0, PLAYER_RADIUS - 2, PLAYER_RADIUS * 0.8, 6);
+  g.beginFill(0x000000, 0.12);
+  g.drawEllipse(0, 18, 16, 5);
   g.endFill();
 
-  const teamColor = TEAM_COLORS[playerData.team];
-
-  // Body
-  g.beginFill(teamColor);
-  g.drawCircle(0, 0, PLAYER_RADIUS);
+  // Body (bottom snowball)
+  g.beginFill(0xf0f0f0);
+  g.drawCircle(0, 8, 16);
   g.endFill();
-  g.lineStyle(2, 0x000000, 0.3);
-  g.drawCircle(0, 0, PLAYER_RADIUS);
+  g.lineStyle(1.5, 0xcccccc, 0.5);
+  g.drawCircle(0, 8, 16);
   g.lineStyle(0);
 
-  // Eyes
-  g.beginFill(0xffffff);
-  g.drawCircle(-6, -4, 3);
-  g.drawCircle(6, -4, 3);
-  g.endFill();
-  g.beginFill(0x222222);
-  g.drawCircle(-5, -4, 1.5);
-  g.drawCircle(7, -4, 1.5);
+  // Snow highlight on body
+  g.beginFill(0xffffff, 0.6);
+  g.drawCircle(-4, 3, 5);
   g.endFill();
 
-  // Hat
-  const hatFn = HAT_DRAW[playerData.hat] || HAT_DRAW.beanie;
-  hatFn(g, teamColor);
+  // Buttons
+  g.beginFill(0x333333);
+  g.drawCircle(0, 5, 1.8);
+  g.drawCircle(0, 11, 1.8);
+  g.endFill();
+
+  // Stick arms
+  g.lineStyle(2, 0x8B6914);
+  g.moveTo(-16, 4);
+  g.lineTo(-26, -4);
+  g.moveTo(-24, -2);
+  g.lineTo(-28, -7);
+  g.moveTo(-24, -2);
+  g.lineTo(-22, -8);
+  g.moveTo(16, 4);
+  g.lineTo(26, -4);
+  g.moveTo(24, -2);
+  g.lineTo(28, -7);
+  g.moveTo(24, -2);
+  g.lineTo(22, -8);
+  g.lineStyle(0);
+
+  // Head (top snowball)
+  g.beginFill(0xf0f0f0);
+  g.drawCircle(0, -10, 12);
+  g.endFill();
+  g.lineStyle(1.5, 0xcccccc, 0.5);
+  g.drawCircle(0, -10, 12);
+  g.lineStyle(0);
+
+  // Snow highlight on head
+  g.beginFill(0xffffff, 0.6);
+  g.drawCircle(-3, -14, 4);
+  g.endFill();
+
+  // Eyes (coal)
+  g.beginFill(0x111111);
+  g.drawCircle(-4, -12, 2);
+  g.drawCircle(4, -12, 2);
+  g.endFill();
+
+  // Carrot nose
+  g.beginFill(0xff8c00);
+  g.moveTo(0, -9);
+  g.lineTo(8, -8);
+  g.lineTo(0, -7);
+  g.closePath();
+  g.endFill();
+
+  // Mouth (coal dots)
+  g.beginFill(0x222222);
+  g.drawCircle(-4, -5, 1);
+  g.drawCircle(-2, -4, 1);
+  g.drawCircle(0, -3.5, 1);
+  g.drawCircle(2, -4, 1);
+  g.drawCircle(4, -5, 1);
+  g.endFill();
+
+  // Scarf
+  g.beginFill(accent);
+  g.drawRoundedRect(-13, -2, 26, 5, 2);
+  g.endFill();
+  g.beginFill(accent, 0.85);
+  g.drawRoundedRect(6, -1, 6, 14, 2);
+  g.endFill();
+  // Scarf highlight
+  g.beginFill(0xffffff, 0.15);
+  g.drawRoundedRect(-12, -1, 24, 2, 1);
+  g.endFill();
+
+  // Top hat with accent band
+  g.beginFill(0x222222);
+  g.drawEllipse(0, -22, 14, 4);
+  g.endFill();
+  g.beginFill(0x222222);
+  g.drawRoundedRect(-9, -36, 18, 16, 2);
+  g.endFill();
+  // Hat band in accent color
+  g.beginFill(accent);
+  g.drawRect(-9, -24, 18, 3);
+  g.endFill();
 
   container.addChild(g);
   return g;
@@ -169,21 +132,44 @@ export function drawCharacter(container, playerData) {
 
 export function drawEliminated(container, playerData) {
   const g = new PIXI.Graphics();
-  g.beginFill(0x888888, 0.6);
-  g.drawEllipse(0, 0, PLAYER_RADIUS * 1.2, PLAYER_RADIUS * 0.4);
+  const accent = getAccentColor(playerData.hat);
+
+  // Melted snowman: flat puddle with accessories
+  g.beginFill(0xdde4ea, 0.6);
+  g.drawEllipse(0, 0, 22, 8);
   g.endFill();
-  g.lineStyle(1, 0x666666, 0.4);
-  g.drawEllipse(0, 0, PLAYER_RADIUS * 1.2, PLAYER_RADIUS * 0.4);
+  g.lineStyle(1, 0xbbc5ce, 0.4);
+  g.drawEllipse(0, 0, 22, 8);
   g.lineStyle(0);
 
-  // X eyes
-  const s = 3;
-  g.lineStyle(1.5, 0x444444);
-  g.moveTo(-8 - s, -3 - s); g.lineTo(-8 + s, -3 + s);
-  g.moveTo(-8 + s, -3 - s); g.lineTo(-8 - s, -3 + s);
-  g.moveTo(8 - s, -3 - s); g.lineTo(8 + s, -3 + s);
-  g.moveTo(8 + s, -3 - s); g.lineTo(8 - s, -3 + s);
-  g.lineStyle(0);
+  // Smaller puddle
+  g.beginFill(0xe8edf2, 0.5);
+  g.drawEllipse(-3, -2, 12, 5);
+  g.endFill();
+
+  // Fallen hat
+  g.beginFill(0x222222, 0.7);
+  g.drawEllipse(8, -2, 8, 3);
+  g.endFill();
+
+  // Fallen scarf
+  g.beginFill(accent, 0.5);
+  g.drawRoundedRect(-10, 1, 14, 3, 1);
+  g.endFill();
+
+  // Coal eyes in the puddle
+  g.beginFill(0x333333, 0.5);
+  g.drawCircle(-5, -2, 1.5);
+  g.drawCircle(0, -2, 1.5);
+  g.endFill();
+
+  // Carrot nose
+  g.beginFill(0xff8c00, 0.6);
+  g.moveTo(2, -1);
+  g.lineTo(7, 0);
+  g.lineTo(2, 1);
+  g.closePath();
+  g.endFill();
 
   container.addChild(g);
   return g;

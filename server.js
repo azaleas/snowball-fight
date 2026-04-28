@@ -264,6 +264,7 @@ function tick() {
       id, name: p.name, team: p.team, x: p.x, y: p.y,
       hp: p.hp, maxHp: MAX_HP, alive: p.alive, hat: p.hat,
       aimAngle: p.aimAngle, isThrowing: Date.now() - p.lastThrow < 300,
+      moving: p.moveX !== 0 || p.moveY !== 0,
     });
   }
 
