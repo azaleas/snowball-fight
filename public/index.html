@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snowball Fight!</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Lobby Screen -->
+  <div id="lobby-screen" class="screen active">
+    <div class="lobby-container">
+      <h1>&#10052; Snowball Fight! &#10052;</h1>
+      <div id="join-form">
+        <input type="text" id="name-input" placeholder="Enter your name..." maxlength="16" autocomplete="off">
+        <button id="join-btn">Join Game</button>
+      </div>
+      <div id="lobby-info" class="hidden">
+        <h2>Lobby</h2>
+        <ul id="player-list"></ul>
+        <p id="player-count"></p>
+        <button id="start-btn" class="hidden">Start Game</button>
+        <p id="waiting-msg">Waiting for host to start...</p>
+      </div>
+      <p id="error-msg" class="error hidden"></p>
+    </div>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="game-screen" class="screen">
+    <div id="game-hud">
+      <div id="team-info"></div>
+      <div id="kill-feed"></div>
+    </div>
+    <div id="game-canvas-container"></div>
+    <div id="spectator-banner" class="hidden">YOU'VE BEEN ELIMINATED - Spectating</div>
+    <div id="cooldown-bar-container">
+      <div id="cooldown-bar"></div>
+    </div>
+  </div>
+
+  <!-- Results Screen -->
+  <div id="results-screen" class="screen">
+    <div class="results-container">
+      <h1 id="winner-title"></h1>
+      <div id="results-stats"></div>
+      <button id="play-again-btn" class="hidden">Play Again</button>
+      <p id="results-waiting" class="hidden">Waiting for host to restart...</p>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

@@ -15,7 +15,7 @@ The game aims to capture the **Snowcraft feel**: isometric 3/4 top-down view, cl
 | Layer | Choice | Why |
 |-------|--------|-----|
 | Runtime | Bun | Faster than Node, built-in HTTP server (no Express needed), fewer deps |
-| Frontend Rendering | PixiJS (v8, via CDN) | Sprite management, z-sorting, tinting, animation — handles isometric rendering grunt work |
+| Frontend Rendering | PixiJS (v7, via CDN) | Sprite management, z-sorting, tinting, animation — handles rendering grunt work |
 | Frontend Logic | Vanilla JS | No framework needed — lobby is simple DOM, game is all PixiJS canvas |
 | Real-time | Socket.IO | Proven WebSocket lib, auto-reconnect, rooms |
 | Assets | Hand-drawn (canvas/PixiJS Graphics) + Kenney UI Pack + freesound.org | No external sprite deps for core game |
@@ -415,25 +415,25 @@ Share the Render URL with players. No DNS or SSL setup needed.
 ## Implementation Order
 
 ### Phase 1: Skeleton
-- [ ] Initialize Bun project (`bun init`), install Socket.IO
-- [ ] Bun HTTP server serving static files
-- [ ] Lobby screen: name input, player list, host start button
-- [ ] Socket.IO connection, join/lobby-update events
+- [x] Initialize Bun project (`bun init`), install Socket.IO
+- [x] Bun HTTP server serving static files
+- [x] Lobby screen: name input, player list, host start button
+- [x] Socket.IO connection, join/lobby-update events
 
 ### Phase 2: Core Game
-- [ ] Server-side game state: players, positions, teams, forts
-- [ ] Team assignment + funny name generator
-- [ ] PixiJS app setup, top-down rendering containers
-- [ ] Draw arena: snow ground, fort rounded rectangles
-- [ ] Draw characters: colored circles + hats + shadows + name labels
-- [ ] Keyboard input: WASD movement, Q/E aim rotation
-- [ ] Aim arrow rendering (line + arrowhead from player)
-- [ ] Snowball throwing with cooldown + server-side trajectory
-- [ ] Fort collision (blocks snowballs and movement)
-- [ ] Server-side hit detection (circle-circle)
-- [ ] HP tracking, HP bars above players
-- [ ] Elimination (squash to grey ellipse) + spectator mode
-- [ ] Win condition check + game-over event
+- [x] Server-side game state: players, positions, teams, forts
+- [x] Team assignment + funny name generator
+- [x] PixiJS app setup, top-down rendering containers
+- [x] Draw arena: snow ground, fort rounded rectangles
+- [x] Draw characters: colored circles + hats + shadows + name labels
+- [x] Keyboard input: WASD movement, Q/E aim rotation
+- [x] Aim arrow rendering (line + arrowhead from player)
+- [x] Snowball throwing with cooldown + server-side trajectory
+- [x] Fort collision (blocks snowballs and movement)
+- [x] Server-side hit detection (circle-circle)
+- [x] HP tracking, HP bars above players
+- [x] Elimination (squash to grey ellipse) + spectator mode
+- [x] Win condition check + game-over event
 
 ### Phase 3: Polish
 - [ ] Unique hat/accessory per avatar (12 styles drawn in code)
