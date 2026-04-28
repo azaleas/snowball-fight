@@ -208,11 +208,33 @@ function tick() {
   // Update player positions
   for (const [id, p] of players) {
     if (!p.alive) continue;
-    const prevX = p.x;
-    const prevY = p.y;
     p.x += p.moveX * PLAYER_SPEED;
     p.y += p.moveY * PLAYER_SPEED;
     clampPlayerToArenaAndForts(p);
+  }
+
+  // Player-player collision (push apart)
+  const alive = [...players.values()].filter(p => p.alive);
+  for (let i = 0; i < alive.length; i++) {
+    for (let j = i + 1; j < alive.length; j++) {
+      const a = alive[i];
+      const b = alive[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minDist = PLAYER_RADIUS * 2;
+      if (dist < minDist && dist > 0) {
+        const overlap = (minDist - dist) / 2;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        a.x -= nx * overlap;
+        a.y -= ny * overlap;
+        b.x += nx * overlap;
+        b.y += ny * overlap;
+        clampPlayerToArenaAndForts(a);
+        clampPlayerToArenaAndForts(b);
+      }
+    }
   }
 
   // Update snowballs
