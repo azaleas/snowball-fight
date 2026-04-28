@@ -54,47 +54,86 @@ export function drawCharacter(container, playerData) {
   body.drawCircle(0, 11, 1.8);
   body.endFill();
 
-  // Team 0 (left side) throws with right arm, team 1 (right side) with left
   const throwsRight = playerData.team === 1;
   const restSide = throwsRight ? -1 : 1;
   const throwSide = throwsRight ? 1 : -1;
-
-  // Resting arm (opposite side from throwing arm)
-  body.lineStyle(2, 0x8B6914);
-  body.moveTo(restSide * 16, 4);
-  body.lineTo(restSide * 26, -4);
-  body.moveTo(restSide * 24, -2);
-  body.lineTo(restSide * 28, -7);
-  body.moveTo(restSide * 24, -2);
-  body.lineTo(restSide * 22, -8);
-  body.lineStyle(0);
+  const charging = playerData.isCharging;
 
   container.addChild(body);
 
-  // --- Layer 2: Throwing arm (animated when throwing) ---
-  const arm = new PIXI.Graphics();
-  arm.lineStyle(2, 0x8B6914);
-  if (throwing) {
-    const dx = Math.cos(aimAngle);
-    const dy = Math.sin(aimAngle);
-    arm.moveTo(0, 0);
-    arm.lineTo(dx * 18, dy * 18);
-    arm.moveTo(dx * 15, dy * 15);
-    arm.lineTo(dx * 15 - dy * 5, dy * 15 + dx * 5);
-    arm.moveTo(dx * 15, dy * 15);
-    arm.lineTo(dx * 15 + dy * 5, dy * 15 - dx * 5);
+  if (charging) {
+    // Both arms come together in front, rolling a snowball
+    const t = (playerData.chargeTime || 0) / 120;
+    const roll = Math.sin(t) * 4;
+
+    const leftArm = new PIXI.Graphics();
+    leftArm.lineStyle(2, 0x8B6914);
+    leftArm.moveTo(0, 0);
+    leftArm.lineTo(8 + roll, 6 + Math.cos(t) * 3);
+    leftArm.lineStyle(0);
+    leftArm.x = -16;
+    leftArm.y = 4;
+    container.addChild(leftArm);
+
+    const rightArm = new PIXI.Graphics();
+    rightArm.lineStyle(2, 0x8B6914);
+    rightArm.moveTo(0, 0);
+    rightArm.lineTo(-8 - roll, 6 - Math.cos(t) * 3);
+    rightArm.lineStyle(0);
+    rightArm.x = 16;
+    rightArm.y = 4;
+    container.addChild(rightArm);
+
+    // Growing snowball between hands (in front of body)
+    const chargePct = Math.min((playerData.chargeTime || 0) / 800, 1);
+    const ballSize = 2 + chargePct * 4;
+    const snowball = new PIXI.Graphics();
+    snowball.beginFill(0xffffff);
+    snowball.drawCircle(0, 14, ballSize);
+    snowball.endFill();
+    snowball.lineStyle(1, 0xdddddd);
+    snowball.drawCircle(0, 14, ballSize);
+    snowball.lineStyle(0);
+    snowball.beginFill(0xffffff, 0.8);
+    snowball.drawCircle(-1, 13, ballSize * 0.3);
+    snowball.endFill();
+    container.addChild(snowball);
   } else {
-    arm.moveTo(0, 0);
-    arm.lineTo(throwSide * 10, -8);
-    arm.moveTo(throwSide * 8, -6);
-    arm.lineTo(throwSide * 12, -11);
-    arm.moveTo(throwSide * 8, -6);
-    arm.lineTo(throwSide * 6, -12);
+    // Resting arm
+    body.lineStyle(2, 0x8B6914);
+    body.moveTo(restSide * 16, 4);
+    body.lineTo(restSide * 26, -4);
+    body.moveTo(restSide * 24, -2);
+    body.lineTo(restSide * 28, -7);
+    body.moveTo(restSide * 24, -2);
+    body.lineTo(restSide * 22, -8);
+    body.lineStyle(0);
+
+    // Throwing arm
+    const arm = new PIXI.Graphics();
+    arm.lineStyle(2, 0x8B6914);
+    if (throwing) {
+      const dx = Math.cos(aimAngle);
+      const dy = Math.sin(aimAngle);
+      arm.moveTo(0, 0);
+      arm.lineTo(dx * 18, dy * 18);
+      arm.moveTo(dx * 15, dy * 15);
+      arm.lineTo(dx * 15 - dy * 5, dy * 15 + dx * 5);
+      arm.moveTo(dx * 15, dy * 15);
+      arm.lineTo(dx * 15 + dy * 5, dy * 15 - dx * 5);
+    } else {
+      arm.moveTo(0, 0);
+      arm.lineTo(throwSide * 10, -8);
+      arm.moveTo(throwSide * 8, -6);
+      arm.lineTo(throwSide * 12, -11);
+      arm.moveTo(throwSide * 8, -6);
+      arm.lineTo(throwSide * 6, -12);
+    }
+    arm.lineStyle(0);
+    arm.x = throwSide * 16;
+    arm.y = 4;
+    container.addChild(arm);
   }
-  arm.lineStyle(0);
-  arm.x = throwSide * 16;
-  arm.y = 4;
-  container.addChild(arm);
 
   // --- Layer 3: Head, face, scarf, hat ---
   const head = new PIXI.Graphics();

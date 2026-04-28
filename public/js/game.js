@@ -279,7 +279,12 @@ function renderState(state) {
     c.y = p.y;
     c.zIndex = p.y;
 
-    drawCharacter(c, p);
+    const drawData = { ...p };
+    if (p.id === network.id && isCharging) {
+      drawData.isCharging = true;
+      drawData.chargeTime = Date.now() - chargeStart;
+    }
+    drawCharacter(c, drawData);
 
     // Aim arrow (only for self)
     if (p.id === network.id) {
