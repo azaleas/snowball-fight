@@ -336,6 +336,8 @@ Replaced the original colored-circle characters with code-drawn snowmen. After e
 - **Expanded arena**: 1600x1000 (up from 1200x800) to accommodate 4-5 players per side
 - **Random barrier positions**: Forts are randomly placed each game (5-7 per side), with different layouts on each team's side
 - **Barriers toggle**: Host can enable/disable barriers via checkbox in lobby before starting. Barriers on by default
+- **Refresh protection**: Browser shows "Leave site?" warning during active game to prevent accidental refresh
+- **Host disconnect handling**: If host leaves during a game, all players are returned to lobby automatically
 - **No external assets**: Everything remains 100% code-drawn with PixiJS Graphics
 
 ---

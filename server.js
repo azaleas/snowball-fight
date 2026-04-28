@@ -486,13 +486,20 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     const p = players.get(socket.id);
     if (p) console.log(`${p.name} disconnected`);
+    const wasHost = socket.id === hostId;
     players.delete(socket.id);
     updateHost();
 
     if (phase === "lobby") {
       broadcastLobby();
-    } else if (phase === "playing") {
-      checkWinCondition();
+    } else if (phase === "playing" || phase === "results") {
+      if (wasHost) {
+        resetGame();
+        io.emit("host-left");
+        broadcastLobby();
+      } else if (phase === "playing") {
+        checkWinCondition();
+      }
     }
   });
 });

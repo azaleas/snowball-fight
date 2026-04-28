@@ -19,13 +19,32 @@ const resultsStats = document.getElementById("results-stats");
 const playAgainBtn = document.getElementById("play-again-btn");
 const resultsWaiting = document.getElementById("results-waiting");
 
+// Beforeunload warning during active game
+let inGame = false;
+window.addEventListener("beforeunload", (e) => {
+  if (inGame) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+
 // Init lobby
 initLobby((data) => {
+  inGame = true;
   showScreen("game");
   initGame(data, showResults);
 });
 
+// Host left during game — return everyone to lobby
+network.on("host-left", () => {
+  inGame = false;
+  cleanup();
+  showScreen("lobby");
+  showLobby();
+});
+
 function showResults(result) {
+  inGame = false;
   showScreen("results");
 
   winnerTitle.textContent = `${result.winningTeamName} Wins!`;
