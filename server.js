@@ -278,16 +278,13 @@ function tick() {
         hitPlayer = true;
 
         if (sameTeam) {
-          // Friendly fire: attacker loses 1 HP as penalty
-          const attacker = players.get(s.ownerId);
-          if (attacker && attacker.alive) {
-            attacker.hp--;
-            io.emit("hit", { targetId: s.ownerId, attackerId: s.ownerId, hpLeft: attacker.hp });
-            if (attacker.hp <= 0) {
-              attacker.alive = false;
-              io.emit("elimination", { playerId: s.ownerId, killerId: s.ownerId });
-              checkWinCondition();
-            }
+          // Friendly fire: teammate takes damage
+          p.hp--;
+          io.emit("hit", { targetId: pid, attackerId: s.ownerId, hpLeft: p.hp, friendlyFire: true });
+          if (p.hp <= 0) {
+            p.alive = false;
+            io.emit("elimination", { playerId: pid, killerId: s.ownerId, friendlyFire: true });
+            checkWinCondition();
           }
         } else {
           // Enemy hit

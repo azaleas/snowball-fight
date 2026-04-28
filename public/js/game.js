@@ -114,20 +114,19 @@ export function initGame(data, onGameOver) {
     updateCooldownBar();
   });
 
-  network.on("hit", ({ targetId, attackerId, hpLeft }) => {
-    const isFriendlyFire = targetId === attackerId;
+  network.on("hit", ({ targetId, attackerId, hpLeft, friendlyFire }) => {
     const target = currentPlayers.find((p) => p.id === targetId);
     const attacker = currentPlayers.find((p) => p.id === attackerId);
     if (target && attacker) {
-      if (isFriendlyFire) {
-        addKillFeedEntry(`${attacker.name} hit a teammate! (-1 HP penalty)`);
+      if (friendlyFire) {
+        addKillFeedEntry(`${attacker.name} hit teammate ${target.name}! (${hpLeft} HP)`);
       } else {
         addKillFeedEntry(`${attacker.name} hit ${target.name} (${hpLeft} HP)`);
       }
     }
     if (target) {
-      addFloatingText(target.x, target.y, "-1", isFriendlyFire ? 0xff8800 : 0xff4444);
-      if (isFriendlyFire) {
+      addFloatingText(target.x, target.y, "-1", friendlyFire ? 0xff8800 : 0xff4444);
+      if (friendlyFire) {
         playFriendlyFire();
       } else {
         playHit();
