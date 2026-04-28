@@ -340,6 +340,7 @@ Replaced the original colored-circle characters with code-drawn snowmen. After e
 - **Host disconnect handling**: If host leaves during a game, all players are returned to lobby automatically
 - **Player-player collision**: Players can no longer pass through each other — they push apart on overlap, applies to all alive players
 - **Friendly fire toggle**: Host can enable/disable in lobby (off by default). When on, hitting a teammate penalizes the attacker (attacker loses 1 HP instead of the target)
+- **Friendly fire sound**: Distinct buzzer sound effect for friendly fire hits, orange floating text, and unique kill feed message to distinguish from normal hits
 - **No external assets**: Everything remains 100% code-drawn with PixiJS Graphics
 
 ---

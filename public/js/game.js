@@ -3,7 +3,7 @@ import {
   ARENA_W, ARENA_H, PLAYER_RADIUS, AIM_ROTATE_SPEED, THROW_COOLDOWN,
   TEAM_CSS, TEAM_COLORS,
 } from "./constants.js";
-import { playThrow, playHit, playElimination, playSplat, toggleMute, isMuted } from "./sounds.js";
+import { playThrow, playHit, playElimination, playSplat, playFriendlyFire, toggleMute, isMuted } from "./sounds.js";
 import {
   drawCharacter, drawEliminated, drawAimArrow, drawSnowball,
   drawFort, drawHPBar, drawGround,
@@ -115,14 +115,23 @@ export function initGame(data, onGameOver) {
   });
 
   network.on("hit", ({ targetId, attackerId, hpLeft }) => {
+    const isFriendlyFire = targetId === attackerId;
     const target = currentPlayers.find((p) => p.id === targetId);
     const attacker = currentPlayers.find((p) => p.id === attackerId);
     if (target && attacker) {
-      addKillFeedEntry(`${attacker.name} hit ${target.name} (${hpLeft} HP)`);
+      if (isFriendlyFire) {
+        addKillFeedEntry(`${attacker.name} hit a teammate! (-1 HP penalty)`);
+      } else {
+        addKillFeedEntry(`${attacker.name} hit ${target.name} (${hpLeft} HP)`);
+      }
     }
     if (target) {
-      addFloatingText(target.x, target.y, "-1", 0xff4444);
-      playHit();
+      addFloatingText(target.x, target.y, "-1", isFriendlyFire ? 0xff8800 : 0xff4444);
+      if (isFriendlyFire) {
+        playFriendlyFire();
+      } else {
+        playHit();
+      }
     }
     if (targetId === network.id) {
       flashScreen();

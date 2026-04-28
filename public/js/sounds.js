@@ -121,6 +121,35 @@ export function playElimination() {
   });
 }
 
+export function playFriendlyFire() {
+  if (muted) return;
+  const ctx = getCtx();
+  const duration = 0.3;
+
+  // Short buzzer — dissonant low tone to signal "you messed up"
+  const osc1 = ctx.createOscillator();
+  osc1.type = "sawtooth";
+  osc1.frequency.setValueAtTime(120, ctx.currentTime);
+  osc1.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + duration);
+
+  const osc2 = ctx.createOscillator();
+  osc2.type = "sawtooth";
+  osc2.frequency.setValueAtTime(127, ctx.currentTime);
+  osc2.frequency.exponentialRampToValueAtTime(85, ctx.currentTime + duration);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.12, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+  osc1.connect(gain).connect(ctx.destination);
+  osc2.connect(gain);
+
+  osc1.start();
+  osc1.stop(ctx.currentTime + duration);
+  osc2.start();
+  osc2.stop(ctx.currentTime + duration);
+}
+
 export function playSplat() {
   if (muted) return;
   const ctx = getCtx();
