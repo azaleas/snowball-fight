@@ -11,6 +11,7 @@ const waitingMsg = document.getElementById("waiting-msg");
 const errorMsg = document.getElementById("error-msg");
 const hostOptions = document.getElementById("host-options");
 const barriersCheckbox = document.getElementById("barriers-checkbox");
+const ffCheckbox = document.getElementById("ff-checkbox");
 
 let joined = false;
 const STORAGE_KEY = "snowball-fight-name";
@@ -32,7 +33,11 @@ export function initLobby(onGameStart) {
     network.emit("toggle-barriers");
   });
 
-  network.on("lobby-update", ({ players, hostId, phase, barriersEnabled }) => {
+  ffCheckbox.addEventListener("change", () => {
+    network.emit("toggle-friendly-fire");
+  });
+
+  network.on("lobby-update", ({ players, hostId, phase, barriersEnabled, friendlyFireEnabled }) => {
     if (phase !== "lobby") return;
 
     playerList.innerHTML = "";
@@ -51,6 +56,7 @@ export function initLobby(onGameStart) {
     waitingMsg.classList.toggle("hidden", isHost);
     startBtn.disabled = players.length < 2;
     barriersCheckbox.checked = barriersEnabled;
+    ffCheckbox.checked = friendlyFireEnabled;
   });
 
   network.on("game-start", (data) => {

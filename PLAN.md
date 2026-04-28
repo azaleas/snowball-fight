@@ -339,6 +339,7 @@ Replaced the original colored-circle characters with code-drawn snowmen. After e
 - **Refresh protection**: Browser shows "Leave site?" warning during active game to prevent accidental refresh
 - **Host disconnect handling**: If host leaves during a game, all players are returned to lobby automatically
 - **Player-player collision**: Players can no longer pass through each other — they push apart on overlap, applies to all alive players
+- **Friendly fire toggle**: Host can enable/disable in lobby (off by default). When on, hitting a teammate penalizes the attacker (attacker loses 1 HP instead of the target)
 - **No external assets**: Everything remains 100% code-drawn with PixiJS Graphics
 
 ---

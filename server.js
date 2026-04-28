@@ -28,6 +28,7 @@ const FORT_H = 40;
 // ── Fort generation ──
 let activeForts = [];
 let barriersEnabled = true;
+let friendlyFireEnabled = false;
 
 function generateForts() {
   if (!barriersEnabled) return [];
@@ -270,24 +271,41 @@ function tick() {
     // Player collision
     let hitPlayer = false;
     for (const [pid, p] of players) {
-      if (!p.alive || p.team === s.team || pid === s.ownerId) continue;
+      if (!p.alive || pid === s.ownerId) continue;
+      const sameTeam = p.team === s.team;
+      if (sameTeam && !friendlyFireEnabled) continue;
       if (circleCircle(s.x, s.y, SNOWBALL_RADIUS, p.x, p.y, PLAYER_RADIUS)) {
-        p.hp--;
         hitPlayer = true;
 
-        // Track stats
-        if (!stats.hits[s.ownerId]) stats.hits[s.ownerId] = 0;
-        stats.hits[s.ownerId]++;
-        if (!stats.firstBlood) stats.firstBlood = s.ownerId;
+        if (sameTeam) {
+          // Friendly fire: attacker loses 1 HP as penalty
+          const attacker = players.get(s.ownerId);
+          if (attacker && attacker.alive) {
+            attacker.hp--;
+            io.emit("hit", { targetId: s.ownerId, attackerId: s.ownerId, hpLeft: attacker.hp });
+            if (attacker.hp <= 0) {
+              attacker.alive = false;
+              io.emit("elimination", { playerId: s.ownerId, killerId: s.ownerId });
+              checkWinCondition();
+            }
+          }
+        } else {
+          // Enemy hit
+          p.hp--;
 
-        io.emit("hit", { targetId: pid, attackerId: s.ownerId, hpLeft: p.hp });
+          if (!stats.hits[s.ownerId]) stats.hits[s.ownerId] = 0;
+          stats.hits[s.ownerId]++;
+          if (!stats.firstBlood) stats.firstBlood = s.ownerId;
 
-        if (p.hp <= 0) {
-          p.alive = false;
-          if (!stats.eliminations[s.ownerId]) stats.eliminations[s.ownerId] = 0;
-          stats.eliminations[s.ownerId]++;
-          io.emit("elimination", { playerId: pid, killerId: s.ownerId });
-          checkWinCondition();
+          io.emit("hit", { targetId: pid, attackerId: s.ownerId, hpLeft: p.hp });
+
+          if (p.hp <= 0) {
+            p.alive = false;
+            if (!stats.eliminations[s.ownerId]) stats.eliminations[s.ownerId] = 0;
+            stats.eliminations[s.ownerId]++;
+            io.emit("elimination", { playerId: pid, killerId: s.ownerId });
+            checkWinCondition();
+          }
         }
         break;
       }
@@ -357,7 +375,7 @@ function broadcastLobby() {
   for (const [id, p] of players) {
     list.push({ id, name: p.name });
   }
-  io.emit("lobby-update", { players: list, hostId, phase, barriersEnabled });
+  io.emit("lobby-update", { players: list, hostId, phase, barriersEnabled, friendlyFireEnabled });
 }
 
 // ── HTTP server ──
@@ -431,6 +449,13 @@ io.on("connection", (socket) => {
     if (socket.id !== hostId) return;
     if (phase !== "lobby") return;
     barriersEnabled = !barriersEnabled;
+    broadcastLobby();
+  });
+
+  socket.on("toggle-friendly-fire", () => {
+    if (socket.id !== hostId) return;
+    if (phase !== "lobby") return;
+    friendlyFireEnabled = !friendlyFireEnabled;
     broadcastLobby();
   });
 
