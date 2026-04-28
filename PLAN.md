@@ -329,6 +329,7 @@ Replaced the original colored-circle characters with code-drawn snowmen. After e
 - **Eliminated state → Melted puddle**: Flat snow puddle with fallen hat, scarf remnants, coal eyes, and carrot nose
 - **Team identification**: No team coloring on characters — the center line boundary makes teams clear
 - **Server**: Added `moving` flag to player state broadcast for potential animation use
+- **Throwing arm animation**: When throwing, the snowman's arm swings out in the aim direction (team 0 throws with left arm, team 1 with right arm — facing toward the opponent's side)
 - **No external assets**: Everything remains 100% code-drawn with PixiJS Graphics
 
 ---

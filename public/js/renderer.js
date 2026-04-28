@@ -23,111 +23,142 @@ function getAccentColor(hat) {
 }
 
 export function drawCharacter(container, playerData) {
-  const g = new PIXI.Graphics();
   const accent = getAccentColor(playerData.hat);
+  const throwing = playerData.isThrowing;
+  const aimAngle = playerData.aimAngle || 0;
+
+  // --- Layer 1: Shadow + Body ---
+  const body = new PIXI.Graphics();
 
   // Shadow
-  g.beginFill(0x000000, 0.12);
-  g.drawEllipse(0, 18, 16, 5);
-  g.endFill();
+  body.beginFill(0x000000, 0.12);
+  body.drawEllipse(0, 18, 16, 5);
+  body.endFill();
 
   // Body (bottom snowball)
-  g.beginFill(0xf0f0f0);
-  g.drawCircle(0, 8, 16);
-  g.endFill();
-  g.lineStyle(1.5, 0xcccccc, 0.5);
-  g.drawCircle(0, 8, 16);
-  g.lineStyle(0);
+  body.beginFill(0xf0f0f0);
+  body.drawCircle(0, 8, 16);
+  body.endFill();
+  body.lineStyle(1.5, 0xcccccc, 0.5);
+  body.drawCircle(0, 8, 16);
+  body.lineStyle(0);
 
   // Snow highlight on body
-  g.beginFill(0xffffff, 0.6);
-  g.drawCircle(-4, 3, 5);
-  g.endFill();
+  body.beginFill(0xffffff, 0.6);
+  body.drawCircle(-4, 3, 5);
+  body.endFill();
 
   // Buttons
-  g.beginFill(0x333333);
-  g.drawCircle(0, 5, 1.8);
-  g.drawCircle(0, 11, 1.8);
-  g.endFill();
+  body.beginFill(0x333333);
+  body.drawCircle(0, 5, 1.8);
+  body.drawCircle(0, 11, 1.8);
+  body.endFill();
 
-  // Stick arms
-  g.lineStyle(2, 0x8B6914);
-  g.moveTo(-16, 4);
-  g.lineTo(-26, -4);
-  g.moveTo(-24, -2);
-  g.lineTo(-28, -7);
-  g.moveTo(-24, -2);
-  g.lineTo(-22, -8);
-  g.moveTo(16, 4);
-  g.lineTo(26, -4);
-  g.moveTo(24, -2);
-  g.lineTo(28, -7);
-  g.moveTo(24, -2);
-  g.lineTo(22, -8);
-  g.lineStyle(0);
+  // Team 0 (left side) throws with right arm, team 1 (right side) with left
+  const throwsRight = playerData.team === 1;
+  const restSide = throwsRight ? -1 : 1;
+  const throwSide = throwsRight ? 1 : -1;
+
+  // Resting arm (opposite side from throwing arm)
+  body.lineStyle(2, 0x8B6914);
+  body.moveTo(restSide * 16, 4);
+  body.lineTo(restSide * 26, -4);
+  body.moveTo(restSide * 24, -2);
+  body.lineTo(restSide * 28, -7);
+  body.moveTo(restSide * 24, -2);
+  body.lineTo(restSide * 22, -8);
+  body.lineStyle(0);
+
+  container.addChild(body);
+
+  // --- Layer 2: Throwing arm (animated when throwing) ---
+  const arm = new PIXI.Graphics();
+  arm.lineStyle(2, 0x8B6914);
+  if (throwing) {
+    const dx = Math.cos(aimAngle);
+    const dy = Math.sin(aimAngle);
+    arm.moveTo(0, 0);
+    arm.lineTo(dx * 18, dy * 18);
+    arm.moveTo(dx * 15, dy * 15);
+    arm.lineTo(dx * 15 - dy * 5, dy * 15 + dx * 5);
+    arm.moveTo(dx * 15, dy * 15);
+    arm.lineTo(dx * 15 + dy * 5, dy * 15 - dx * 5);
+  } else {
+    arm.moveTo(0, 0);
+    arm.lineTo(throwSide * 10, -8);
+    arm.moveTo(throwSide * 8, -6);
+    arm.lineTo(throwSide * 12, -11);
+    arm.moveTo(throwSide * 8, -6);
+    arm.lineTo(throwSide * 6, -12);
+  }
+  arm.lineStyle(0);
+  arm.x = throwSide * 16;
+  arm.y = 4;
+  container.addChild(arm);
+
+  // --- Layer 3: Head, face, scarf, hat ---
+  const head = new PIXI.Graphics();
+
+  // Scarf (behind head)
+  head.beginFill(accent);
+  head.drawRoundedRect(-13, -2, 26, 5, 2);
+  head.endFill();
+  head.beginFill(accent, 0.85);
+  head.drawRoundedRect(6, -1, 6, 14, 2);
+  head.endFill();
+  head.beginFill(0xffffff, 0.15);
+  head.drawRoundedRect(-12, -1, 24, 2, 1);
+  head.endFill();
 
   // Head (top snowball)
-  g.beginFill(0xf0f0f0);
-  g.drawCircle(0, -10, 12);
-  g.endFill();
-  g.lineStyle(1.5, 0xcccccc, 0.5);
-  g.drawCircle(0, -10, 12);
-  g.lineStyle(0);
+  head.beginFill(0xf0f0f0);
+  head.drawCircle(0, -10, 12);
+  head.endFill();
+  head.lineStyle(1.5, 0xcccccc, 0.5);
+  head.drawCircle(0, -10, 12);
+  head.lineStyle(0);
 
   // Snow highlight on head
-  g.beginFill(0xffffff, 0.6);
-  g.drawCircle(-3, -14, 4);
-  g.endFill();
+  head.beginFill(0xffffff, 0.6);
+  head.drawCircle(-3, -14, 4);
+  head.endFill();
 
   // Eyes (coal)
-  g.beginFill(0x111111);
-  g.drawCircle(-4, -12, 2);
-  g.drawCircle(4, -12, 2);
-  g.endFill();
+  head.beginFill(0x111111);
+  head.drawCircle(-4, -12, 2);
+  head.drawCircle(4, -12, 2);
+  head.endFill();
 
   // Carrot nose
-  g.beginFill(0xff8c00);
-  g.moveTo(0, -9);
-  g.lineTo(8, -8);
-  g.lineTo(0, -7);
-  g.closePath();
-  g.endFill();
+  head.beginFill(0xff8c00);
+  head.moveTo(0, -9);
+  head.lineTo(8, -8);
+  head.lineTo(0, -7);
+  head.closePath();
+  head.endFill();
 
   // Mouth (coal dots)
-  g.beginFill(0x222222);
-  g.drawCircle(-4, -5, 1);
-  g.drawCircle(-2, -4, 1);
-  g.drawCircle(0, -3.5, 1);
-  g.drawCircle(2, -4, 1);
-  g.drawCircle(4, -5, 1);
-  g.endFill();
-
-  // Scarf
-  g.beginFill(accent);
-  g.drawRoundedRect(-13, -2, 26, 5, 2);
-  g.endFill();
-  g.beginFill(accent, 0.85);
-  g.drawRoundedRect(6, -1, 6, 14, 2);
-  g.endFill();
-  // Scarf highlight
-  g.beginFill(0xffffff, 0.15);
-  g.drawRoundedRect(-12, -1, 24, 2, 1);
-  g.endFill();
+  head.beginFill(0x222222);
+  head.drawCircle(-4, -5, 1);
+  head.drawCircle(-2, -4, 1);
+  head.drawCircle(0, -3.5, 1);
+  head.drawCircle(2, -4, 1);
+  head.drawCircle(4, -5, 1);
+  head.endFill();
 
   // Top hat with accent band
-  g.beginFill(0x222222);
-  g.drawEllipse(0, -22, 14, 4);
-  g.endFill();
-  g.beginFill(0x222222);
-  g.drawRoundedRect(-9, -36, 18, 16, 2);
-  g.endFill();
-  // Hat band in accent color
-  g.beginFill(accent);
-  g.drawRect(-9, -24, 18, 3);
-  g.endFill();
+  head.beginFill(0x222222);
+  head.drawEllipse(0, -22, 14, 4);
+  head.endFill();
+  head.beginFill(0x222222);
+  head.drawRoundedRect(-9, -36, 18, 16, 2);
+  head.endFill();
+  head.beginFill(accent);
+  head.drawRect(-9, -24, 18, 3);
+  head.endFill();
 
-  container.addChild(g);
-  return g;
+  container.addChild(head);
+  return container;
 }
 
 export function drawEliminated(container, playerData) {
