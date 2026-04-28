@@ -20,84 +20,102 @@ function getCtx() {
   return audioCtx;
 }
 
-export function playThrow() {
-  if (muted) return;
-  const ctx = getCtx();
-  const duration = 0.15;
+// Pre-load audio buffers from files
+const bufferCache = {};
 
-  // White noise burst for whoosh
-  const bufferSize = ctx.sampleRate * duration;
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+async function loadBuffer(url) {
+  if (bufferCache[url]) return bufferCache[url];
+  try {
+    const ctx = getCtx();
+    const resp = await fetch(url);
+    const arrayBuf = await resp.arrayBuffer();
+    const audioBuf = await ctx.decodeAudioData(arrayBuf);
+    bufferCache[url] = audioBuf;
+    return audioBuf;
+  } catch {
+    return null;
   }
+}
 
+function playBuffer(buffer, volume = 0.3, rate = 1) {
+  if (!buffer) return;
+  const ctx = getCtx();
   const source = ctx.createBufferSource();
   source.buffer = buffer;
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = "bandpass";
-  filter.frequency.setValueAtTime(2000, ctx.currentTime);
-  filter.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + duration);
-  filter.Q.value = 1;
-
+  source.playbackRate.value = rate;
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.15, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-
-  source.connect(filter).connect(gain).connect(ctx.destination);
+  gain.gain.value = volume;
+  source.connect(gain).connect(ctx.destination);
   source.start();
-  source.stop(ctx.currentTime + duration);
 }
 
+// Pre-load all sound files
+const FOOTSTEP_URLS = Array.from({ length: 5 }, (_, i) => `/sounds/footstep_snow_00${i}.ogg`);
+const THROW_URLS = Array.from({ length: 3 }, (_, i) => `/sounds/throw_00${i}.ogg`);
+const HIT_URLS = Array.from({ length: 3 }, (_, i) => `/sounds/impactSoft_heavy_00${i}.ogg`);
+const SPLAT_URLS = Array.from({ length: 3 }, (_, i) => `/sounds/impactSoft_medium_00${i}.ogg`);
+
+export function preloadSounds() {
+  const all = [...FOOTSTEP_URLS, ...THROW_URLS, ...HIT_URLS, ...SPLAT_URLS];
+  all.forEach((url) => loadBuffer(url));
+}
+
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// --- Footsteps ---
+let lastFootstepTime = 0;
+const FOOTSTEP_INTERVAL = 250;
+
+export function playFootstep() {
+  if (muted) return;
+  const now = Date.now();
+  if (now - lastFootstepTime < FOOTSTEP_INTERVAL) return;
+  lastFootstepTime = now;
+
+  const url = pickRandom(FOOTSTEP_URLS);
+  const buf = bufferCache[url];
+  if (buf) {
+    playBuffer(buf, 0.25 + Math.random() * 0.1, 0.9 + Math.random() * 0.2);
+  }
+}
+
+// --- Throw ---
+export function playThrow() {
+  if (muted) return;
+  const url = pickRandom(THROW_URLS);
+  const buf = bufferCache[url];
+  if (buf) {
+    playBuffer(buf, 0.3, 1.2 + Math.random() * 0.3);
+  }
+}
+
+// --- Hit ---
 export function playHit() {
   if (muted) return;
-  const ctx = getCtx();
-  const duration = 0.2;
-
-  // Soft thud — low frequency sine with noise
-  const osc = ctx.createOscillator();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(150, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + duration);
-
-  const oscGain = ctx.createGain();
-  oscGain.gain.setValueAtTime(0.2, ctx.currentTime);
-  oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-
-  // Noise crunch
-  const bufferSize = ctx.sampleRate * duration;
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize) * 0.5;
+  const url = pickRandom(HIT_URLS);
+  const buf = bufferCache[url];
+  if (buf) {
+    playBuffer(buf, 0.35, 0.9 + Math.random() * 0.2);
   }
-  const noise = ctx.createBufferSource();
-  noise.buffer = buffer;
-
-  const noiseFilter = ctx.createBiquadFilter();
-  noiseFilter.type = "lowpass";
-  noiseFilter.frequency.value = 500;
-
-  const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(0.12, ctx.currentTime);
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-
-  osc.connect(oscGain).connect(ctx.destination);
-  noise.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
-
-  osc.start();
-  osc.stop(ctx.currentTime + duration);
-  noise.start();
-  noise.stop(ctx.currentTime + duration);
 }
 
+// --- Splat ---
+export function playSplat() {
+  if (muted) return;
+  const url = pickRandom(SPLAT_URLS);
+  const buf = bufferCache[url];
+  if (buf) {
+    playBuffer(buf, 0.2, 1.0 + Math.random() * 0.3);
+  }
+}
+
+// --- Elimination (procedural — comedic wa-wa-waaaa) ---
 export function playElimination() {
   if (muted) return;
   const ctx = getCtx();
 
-  // Descending comedic tone (wa-wa-waaaa)
   const notes = [400, 350, 200];
   const noteDur = 0.15;
 
@@ -121,12 +139,12 @@ export function playElimination() {
   });
 }
 
+// --- Friendly fire (procedural — dissonant buzzer) ---
 export function playFriendlyFire() {
   if (muted) return;
   const ctx = getCtx();
   const duration = 0.3;
 
-  // Short buzzer — dissonant low tone to signal "you messed up"
   const osc1 = ctx.createOscillator();
   osc1.type = "sawtooth";
   osc1.frequency.setValueAtTime(120, ctx.currentTime);
@@ -148,69 +166,4 @@ export function playFriendlyFire() {
   osc1.stop(ctx.currentTime + duration);
   osc2.start();
   osc2.stop(ctx.currentTime + duration);
-}
-
-let lastFootstepTime = 0;
-const FOOTSTEP_INTERVAL = 220;
-
-export function playFootstep() {
-  if (muted) return;
-  const now = Date.now();
-  if (now - lastFootstepTime < FOOTSTEP_INTERVAL) return;
-  lastFootstepTime = now;
-
-  const ctx = getCtx();
-  const duration = 0.08 + Math.random() * 0.04;
-
-  const bufferSize = Math.floor(ctx.sampleRate * duration);
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) {
-    const env = 1 - i / bufferSize;
-    data[i] = (Math.random() * 2 - 1) * env * env;
-  }
-
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = "bandpass";
-  filter.frequency.value = 600 + Math.random() * 400;
-  filter.Q.value = 0.8;
-
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.06 + Math.random() * 0.02, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-
-  source.connect(filter).connect(gain).connect(ctx.destination);
-  source.start();
-  source.stop(ctx.currentTime + duration);
-}
-
-export function playSplat() {
-  if (muted) return;
-  const ctx = getCtx();
-  const duration = 0.1;
-
-  const bufferSize = ctx.sampleRate * duration;
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
-  }
-
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = "lowpass";
-  filter.frequency.value = 800;
-
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.08, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-
-  source.connect(filter).connect(gain).connect(ctx.destination);
-  source.start();
-  source.stop(ctx.currentTime + duration);
 }

@@ -285,12 +285,13 @@ snowthrowing/
 │   ├── index.html           # Single HTML file, loads PixiJS from CDN + our modules
 │   ├── css/
 │   │   └── style.css        # Lobby styling, HUD, results screen
+│   ├── sounds/              # Kenney CC0 audio files (.ogg)
 │   ├── js/
 │   │   ├── main.js          # Entry point, screen manager
 │   │   ├── lobby.js         # Lobby screen logic (DOM-based, no PixiJS)
 │   │   ├── game.js          # PixiJS app, game loop, character drawing, input
 │   │   ├── renderer.js      # Drawing functions (characters, forts, snowballs, HUD)
-│   │   ├── sounds.js        # Procedural sound effects (Web Audio API), mute toggle
+│   │   ├── sounds.js        # Audio playback (file-based + procedural), preloading, mute toggle
 │   │   ├── network.js       # Socket.IO client wrapper
 │   │   └── constants.js     # Shared config (speeds, cooldowns, arena size)
 └── README.md                # How to run locally + deploy instructions
@@ -312,9 +313,9 @@ All core visuals are **drawn programmatically** with PixiJS Graphics — no spri
 | HP bars | Drawn in code | Colored rectangles above players |
 | Aim arrow | Drawn in code | Line + arrowhead from player center |
 | UI (lobby, results) | HTML/CSS | DOM-based, no canvas needed for menus |
-| Sound effects | Procedural (Web Audio API) | Throw whoosh, hit thud, elimination jingle, splat — no external files |
+| Sound effects | Kenney CC0 audio files + procedural (Web Audio API) | Footsteps, throw, hit, splat from Kenney packs; elimination jingle + friendly fire buzzer procedural |
 
-**Zero external file downloads.** Everything — visuals and audio — is code-generated, keeping the project lightweight and eliminating asset pipeline complexity. Sound is muted by default; players can toggle via in-game button (persisted in localStorage).
+Sound effects use a mix of **Kenney CC0 audio files** (snow footsteps, throw whoosh, hit impact, splat) and **procedural Web Audio API** (elimination jingle, friendly fire buzzer). All audio files are from [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) and [Kenney RPG Audio](https://kenney.nl/assets/rpg-audio) packs (CC0 / public domain). Sound is muted by default; players can toggle via in-game button (persisted in localStorage). Audio buffers are preloaded at game start for zero-latency playback with random variation in pitch and volume.
 
 ---
 
@@ -430,7 +431,7 @@ Share the Render URL with players. No DNS or SSL setup needed.
 - [x] Player name persistence (localStorage)
 - [x] Floating "-1" damage text on hit (rises and fades)
 - [x] "Packing snow" visual during throw cooldown (swirling snow particles)
-- [x] Sound effects: procedural Web Audio API (throw whoosh, hit thud, elimination wa-wa-waa, splat, friendly fire buzzer, snow footsteps) — no external files
+- [x] Sound effects: Kenney CC0 audio files (footsteps, throw, hit, splat) + procedural Web Audio (elimination, friendly fire buzzer) with preloading and random variation
 - [x] Footprint trails in snow (fade over 3s, own player only)
 
 ### Phase 4: Deploy & Test

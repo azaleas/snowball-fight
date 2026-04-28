@@ -3,7 +3,7 @@ import {
   ARENA_W, ARENA_H, PLAYER_RADIUS, AIM_ROTATE_SPEED, THROW_COOLDOWN,
   TEAM_CSS, TEAM_COLORS,
 } from "./constants.js";
-import { playThrow, playHit, playElimination, playSplat, playFriendlyFire, playFootstep, toggleMute, isMuted } from "./sounds.js";
+import { playThrow, playHit, playElimination, playSplat, playFriendlyFire, playFootstep, preloadSounds, toggleMute, isMuted } from "./sounds.js";
 import {
   drawCharacter, drawEliminated, drawAimArrow, drawSnowball,
   drawFort, drawHPBar, drawGround,
@@ -86,6 +86,8 @@ export function initGame(data, onGameOver) {
 
   document.getElementById("spectator-banner").classList.add("hidden");
   updateTeamHUD(data.players);
+
+  preloadSounds();
 
   // Mute button
   const muteBtn = document.getElementById("mute-btn");
