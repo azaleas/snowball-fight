@@ -9,6 +9,8 @@ const playerCount = document.getElementById("player-count");
 const startBtn = document.getElementById("start-btn");
 const waitingMsg = document.getElementById("waiting-msg");
 const errorMsg = document.getElementById("error-msg");
+const hostOptions = document.getElementById("host-options");
+const barriersCheckbox = document.getElementById("barriers-checkbox");
 
 let joined = false;
 const STORAGE_KEY = "snowball-fight-name";
@@ -26,7 +28,11 @@ export function initLobby(onGameStart) {
     network.emit("start-game");
   });
 
-  network.on("lobby-update", ({ players, hostId, phase }) => {
+  barriersCheckbox.addEventListener("change", () => {
+    network.emit("toggle-barriers");
+  });
+
+  network.on("lobby-update", ({ players, hostId, phase, barriersEnabled }) => {
     if (phase !== "lobby") return;
 
     playerList.innerHTML = "";
@@ -41,8 +47,10 @@ export function initLobby(onGameStart) {
 
     const isHost = network.id === hostId;
     startBtn.classList.toggle("hidden", !isHost);
+    hostOptions.classList.toggle("hidden", !isHost);
     waitingMsg.classList.toggle("hidden", isHost);
     startBtn.disabled = players.length < 2;
+    barriersCheckbox.checked = barriersEnabled;
   });
 
   network.on("game-start", (data) => {

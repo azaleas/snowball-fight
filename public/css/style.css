@@ -138,6 +138,25 @@ button:active {
   margin-top: 8px;
 }
 
+#host-options {
+  margin-top: 12px;
+}
+
+#barriers-toggle {
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #555;
+}
+
+#barriers-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
 #waiting-msg {
   color: #6b7280;
   font-style: italic;

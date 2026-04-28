@@ -8,8 +8,8 @@ const TICK_RATE = 20;
 const TICK_MS = 1000 / TICK_RATE;
 
 // ── Game constants ──
-const ARENA_W = 1200;
-const ARENA_H = 800;
+const ARENA_W = 1600;
+const ARENA_H = 1000;
 const PLAYER_RADIUS = 20;
 const PLAYER_SPEED = 7;
 const SNOWBALL_RADIUS = 8;
@@ -25,21 +25,40 @@ const MAX_PLAYERS = 11;
 const FORT_W = 60;
 const FORT_H = 40;
 
-// ── Fort layout (symmetrical) ──
-const FORT_LAYOUT = [
-  { x: 200, y: 150 },
-  { x: 200, y: 650 },
-  { x: 400, y: 350 },
-  { x: 400, y: 500 },
-  { x: 550, y: 200 },
-  { x: 550, y: 600 },
-  { x: 650, y: 200 },
-  { x: 650, y: 600 },
-  { x: 800, y: 350 },
-  { x: 800, y: 500 },
-  { x: 1000, y: 150 },
-  { x: 1000, y: 650 },
-];
+// ── Fort generation ──
+let activeForts = [];
+let barriersEnabled = true;
+
+function generateForts() {
+  if (!barriersEnabled) return [];
+  const forts = [];
+  const margin = 80;
+  const halfW = ARENA_W / 2;
+  const fortCount = 5 + Math.floor(Math.random() * 3); // 5-7 per side
+
+  for (let side = 0; side < 2; side++) {
+    const minX = side === 0 ? margin : halfW + margin;
+    const maxX = side === 0 ? halfW - margin : ARENA_W - margin;
+
+    for (let i = 0; i < fortCount; i++) {
+      let x, y, overlaps;
+      let attempts = 0;
+      do {
+        x = minX + Math.random() * (maxX - minX);
+        y = margin + Math.random() * (ARENA_H - margin * 2);
+        overlaps = forts.some(f =>
+          Math.abs(f.x - x) < FORT_W + 30 && Math.abs(f.y - y) < FORT_H + 30
+        );
+        attempts++;
+      } while (overlaps && attempts < 20);
+
+      if (!overlaps) {
+        forts.push({ x: Math.round(x), y: Math.round(y) });
+      }
+    }
+  }
+  return forts;
+}
 
 // ── Funny team names ──
 const ADJECTIVES = [
@@ -169,7 +188,7 @@ function clampPlayerToArenaAndForts(p) {
     p.x = Math.max(p.x, center + PLAYER_RADIUS);
   }
 
-  for (const fort of FORT_LAYOUT) {
+  for (const fort of activeForts) {
     if (circleRect(p.x, p.y, PLAYER_RADIUS, fort.x - FORT_W / 2, fort.y - FORT_H / 2, FORT_W, FORT_H)) {
       const dx = p.x - fort.x;
       const dy = p.y - fort.y;
@@ -214,7 +233,7 @@ function tick() {
 
     // Fort collision
     let hitFort = false;
-    for (const fort of FORT_LAYOUT) {
+    for (const fort of activeForts) {
       if (circleRect(s.x, s.y, SNOWBALL_RADIUS, fort.x - FORT_W / 2, fort.y - FORT_H / 2, FORT_W, FORT_H)) {
         hitFort = true;
         break;
@@ -316,7 +335,7 @@ function broadcastLobby() {
   for (const [id, p] of players) {
     list.push({ id, name: p.name });
   }
-  io.emit("lobby-update", { players: list, hostId, phase });
+  io.emit("lobby-update", { players: list, hostId, phase, barriersEnabled });
 }
 
 // ── HTTP server ──
@@ -386,11 +405,19 @@ io.on("connection", (socket) => {
     console.log(`${name} joined (${players.size} players)`);
   });
 
+  socket.on("toggle-barriers", () => {
+    if (socket.id !== hostId) return;
+    if (phase !== "lobby") return;
+    barriersEnabled = !barriersEnabled;
+    broadcastLobby();
+  });
+
   socket.on("start-game", () => {
     if (socket.id !== hostId) return;
     if (players.size < MIN_PLAYERS) return;
     if (phase !== "lobby") return;
 
+    activeForts = generateForts();
     assignTeams();
     phase = "playing";
 
@@ -406,7 +433,7 @@ io.on("connection", (socket) => {
     io.emit("game-start", {
       players: playerStates,
       teamNames,
-      forts: FORT_LAYOUT.map(f => ({ x: f.x, y: f.y, w: FORT_W, h: FORT_H })),
+      forts: activeForts.map(f => ({ x: f.x, y: f.y, w: FORT_W, h: FORT_H })),
     });
   });
 

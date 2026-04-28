@@ -126,7 +126,7 @@ All game visuals are drawn programmatically using PixiJS Graphics — no externa
 - Snow forts are **pre-placed obstacles/cover** (not buildable, keeping it simple)
 - Forts block snowball travel (snowballs collide and disappear on hitting a fort)
 - Forts block player movement (must go around)
-- Arena size scaled for 10 players — roughly 1200x800 logical units
+- Arena size scaled for 10 players — 1600x1000 logical units
 - Subtle details: scattered snowflake particles, tree sprites at edges, footprint trails (optional polish)
 
 ---
@@ -332,6 +332,10 @@ Replaced the original colored-circle characters with code-drawn snowmen. After e
 - **Throwing arm animation**: When throwing, the snowman's arm swings out in the aim direction (team 0 throws with left arm, team 1 with right arm — facing toward the opponent's side)
 - **Snowball charging animation**: While holding space, both arms come together and roll a growing snowball in front of the body. Ball size reflects charge power (0–100%)
 - **Ice glacier forts**: Replaced rounded rectangles with jagged ice/glacier shapes — irregular polygons with ice spikes, shine highlights, crack lines, and shadows. Each fort has a unique shape via seeded random (consistent across redraws)
+- **Removed aim arrow**: No more arrow indicator on the player snowman
+- **Expanded arena**: 1600x1000 (up from 1200x800) to accommodate 4-5 players per side
+- **Random barrier positions**: Forts are randomly placed each game (5-7 per side), with different layouts on each team's side
+- **Barriers toggle**: Host can enable/disable barriers via checkbox in lobby before starting. Barriers on by default
 - **No external assets**: Everything remains 100% code-drawn with PixiJS Graphics
 
 ---

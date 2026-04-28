@@ -286,10 +286,8 @@ function renderState(state) {
     }
     drawCharacter(c, drawData);
 
-    // Aim arrow (only for self)
+    // Self-only visuals
     if (p.id === network.id) {
-      drawAimArrow(c, aimAngle);
-
       // Packing snow visual during cooldown
       const cooldownElapsed = now - lastThrowTime;
       if (cooldownElapsed < THROW_COOLDOWN) {

@@ -1,5 +1,5 @@
-export const ARENA_W = 1200;
-export const ARENA_H = 800;
+export const ARENA_W = 1600;
+export const ARENA_H = 1000;
 export const PLAYER_RADIUS = 20;
 export const SNOWBALL_RADIUS = 8;
 export const MAX_HP = 5;
