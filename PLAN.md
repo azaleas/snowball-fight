@@ -19,7 +19,7 @@ The game aims to capture the **Snowcraft feel**: isometric 3/4 top-down view, cl
 | Frontend Logic | Vanilla JS | No framework needed — lobby is simple DOM, game is all PixiJS canvas |
 | Real-time | Socket.IO | Proven WebSocket lib, auto-reconnect, rooms |
 | Assets | Hand-drawn (canvas/PixiJS Graphics) + Kenney UI Pack + freesound.org | No external sprite deps for core game |
-| Hosting | Render.com free tier | Serves static files + WebSockets from one app, free, supports Bun |
+| Hosting | Fly.io free tier | Always-on VMs, native WebSocket support, direct CLI deploy (no GitHub needed) |
 
 No build step. No bundler. PixiJS loaded from CDN, everything else is plain JS served as static files.
 
@@ -381,16 +381,24 @@ Client-side: just refresh the browser (no build step, no HMR needed).
 
 ## Deployment
 
-### Production (Render.com)
+### Production (Fly.io)
 
-1. Push to GitHub
-2. Create a new Web Service on Render, point to the repo
-3. Environment: **Bun** (Render supports it natively)
-4. Build command: `bun install`
-5. Start command: `bun run server.js`
-6. Free tier — sleeps after 15 min inactivity, ~30s cold start
+Fly.io is the best free option for this project — always-on VMs, native WebSocket support, and direct CLI deploys (no GitHub required).
 
-Share the Render URL with players. No DNS or SSL setup needed.
+1. Install Fly CLI: `curl -L https://fly.io/install.sh | sh`
+2. Sign up / log in: `fly auth signup` or `fly auth login`
+3. Launch the app: `fly launch` (from the project directory)
+4. Deploy: `fly deploy`
+5. Open: `fly open`
+
+**Why Fly.io over alternatives:**
+
+- **Always-on** — no cold starts or sleep timeouts (critical for WebSocket games)
+- **Direct CLI deploy** — push from local machine, no Git hosting needed
+- **WebSocket-friendly** — persistent connections work out of the box
+- Free tier includes 3 shared VMs with 256MB RAM each
+
+Share the Fly.io URL with players. SSL included automatically.
 
 ---
 
@@ -435,8 +443,7 @@ Share the Render URL with players. No DNS or SSL setup needed.
 - [x] Footprint trails in snow (fade over 3s, own player only)
 
 ### Phase 4: Deploy & Test
-- [ ] Push to GitHub
-- [ ] Deploy to Render.com
+- [ ] Deploy to Fly.io (direct CLI deploy, no GitHub needed)
 - [ ] Test with real players on multiple devices
 - [ ] Tweak balance: movement speed, throw speed, cooldown, arena size, fort placement
 - [ ] Mobile considerations: if needed, add on-screen touch controls (stretch goal)
