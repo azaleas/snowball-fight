@@ -1,6 +1,6 @@
 class Network {
   constructor() {
-    this.socket = io();
+    this.socket = io({ transports: ["websocket"] });
     this._id = null;
     this.socket.on("connect", () => {
       this._id = this.socket.id;
