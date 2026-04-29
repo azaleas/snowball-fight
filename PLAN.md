@@ -381,24 +381,47 @@ Client-side: just refresh the browser (no build step, no HMR needed).
 
 ## Deployment
 
-### Production (Fly.io)
+### Option A: Railway (Recommended)
 
-Fly.io is the best free option for this project — always-on VMs, native WebSocket support, and direct CLI deploys (no GitHub required).
+Railway offers $5 free credits (30-day trial, no credit card required). For this lightweight Bun+WebSocket server, $5 lasts weeks even with regular 10-player sessions.
+
+1. Install Railway CLI: `brew install railway` (or `npm i -g @railway/cli`)
+2. Sign up / log in: `railway login`
+3. Create project: `railway init`
+4. Deploy: `railway up`
+5. Generate a public URL: `railway domain`
+
+**Cost estimate:**
+- Idle server: ~$0.15/day
+- Active 10-player session: ~$0.20/day (CPU + bandwidth)
+- $5 credits ≈ 3-4 weeks of regular use
+
+**Pros:** No credit card, no hour limits, no sleep/suspend, generous credits for a game jam.
+**Cons:** Credits eventually expire (30 days); no custom domain on free tier.
+
+### Option B: Fly.io
+
+Fly.io has a free trial with **2 machine-hours** (burns quickly with 2 machines). Best for very short-lived demos.
 
 1. Install Fly CLI: `curl -L https://fly.io/install.sh | sh`
 2. Sign up / log in: `fly auth signup` or `fly auth login`
 3. Launch the app: `fly launch` (from the project directory)
 4. Deploy: `fly deploy`
-5. Open: `fly open`
+5. Scale to 1 machine: `fly scale count 1 --yes`
 
-**Why Fly.io over alternatives:**
+**Important notes:**
+- Scale to 1 machine immediately — Fly creates 2 by default, burning hours 2x faster
+- Force WebSocket-only transport in client (skip polling) to avoid multi-machine routing issues
+- Free trial: 2 machine-hours total, requires credit card to continue
+- Use `auto_stop_machines = "suspend"` in fly.toml to conserve hours when idle
 
-- **Always-on** — no cold starts or sleep timeouts (critical for WebSocket games)
-- **Direct CLI deploy** — push from local machine, no Git hosting needed
-- **WebSocket-friendly** — persistent connections work out of the box
-- Free tier includes 3 shared VMs with 256MB RAM each
+**Fly deployment:** https://snowball-fight-game.fly.dev/
+**Railway deployment:** https://snowball-fight-production-25e4.up.railway.app/
 
-Share the Fly.io URL with players. SSL included automatically.
+### Cleanup
+
+- Destroy Fly app: `fly apps destroy snowball-fight-game`
+- Destroy Railway project: `railway down` or via dashboard
 
 ---
 
