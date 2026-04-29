@@ -381,47 +381,41 @@ Client-side: just refresh the browser (no build step, no HMR needed).
 
 ## Deployment
 
-### Option A: Railway (Recommended)
+### Railway (Recommended)
 
-Railway offers $5 free credits (30-day trial, no credit card required). For this lightweight Bun+WebSocket server, $5 lasts weeks even with regular 10-player sessions.
+Railway offers $5 free credits (30-day trial, no credit card required). With serverless/app-sleeping enabled, it costs nothing when idle and auto-wakes on traffic.
 
 1. Install Railway CLI: `brew install railway` (or `npm i -g @railway/cli`)
 2. Sign up / log in: `railway login`
 3. Create project: `railway init`
 4. Deploy: `railway up`
 5. Generate a public URL: `railway domain`
+6. Enable **Serverless** in service Settings (scales to zero when idle, wakes on traffic)
 
-**Cost estimate:**
-- Idle server: ~$0.15/day
-- Active 10-player session: ~$0.20/day (CPU + bandwidth)
-- $5 credits ≈ 3-4 weeks of regular use
+**Actual cost (measured):**
+- ~$0.04/hour during active play (2 browsers)
+- ~$1/day if running 24/7 non-stop
+- With serverless enabled: **$0 when idle**, only bills during active sessions
+- $5 credits lasts weeks with normal usage patterns
 
-**Pros:** No credit card, no hour limits, no sleep/suspend, generous credits for a game jam.
-**Cons:** Credits eventually expire (30 days); no custom domain on free tier.
+**Pros:** No credit card, serverless auto-sleep, generous credits, WebSocket support.
+**Cons:** Credits expire after 30 days; no custom domain on free tier; ~5s cold start when waking.
 
-### Option B: Fly.io
+**Live deployment:** https://snowball-fight-production-25e4.up.railway.app/
 
-Fly.io has a free trial with **2 machine-hours** (burns quickly with 2 machines). Best for very short-lived demos.
+### Why not Fly.io?
 
-1. Install Fly CLI: `curl -L https://fly.io/install.sh | sh`
-2. Sign up / log in: `fly auth signup` or `fly auth login`
-3. Launch the app: `fly launch` (from the project directory)
-4. Deploy: `fly deploy`
-5. Scale to 1 machine: `fly scale count 1 --yes`
-
-**Important notes:**
-- Scale to 1 machine immediately — Fly creates 2 by default, burning hours 2x faster
-- Force WebSocket-only transport in client (skip polling) to avoid multi-machine routing issues
-- Free trial: 2 machine-hours total, requires credit card to continue
-- Use `auto_stop_machines = "suspend"` in fly.toml to conserve hours when idle
-
-**Fly deployment:** https://snowball-fight-game.fly.dev/
-**Railway deployment:** https://snowball-fight-production-25e4.up.railway.app/
+We tried Fly.io first but found it impractical for free-tier use:
+- Free trial only gives **2 machine-hours total** (not per day)
+- Creates 2 machines by default, burning hours 2x faster
+- Multi-machine setup causes Socket.IO polling errors (need WebSocket-only transport)
+- Requires credit card to continue past trial
+- Suspend-on-idle helps but still burns hours when anyone visits
 
 ### Cleanup
 
-- Destroy Fly app: `fly apps destroy snowball-fight-game`
-- Destroy Railway project: `railway down` or via dashboard
+- Stop Railway service: via dashboard Settings or `railway down`
+- Redeploy: `railway up`
 
 ---
 
@@ -466,7 +460,7 @@ Fly.io has a free trial with **2 machine-hours** (burns quickly with 2 machines)
 - [x] Footprint trails in snow (fade over 3s, own player only)
 
 ### Phase 4: Deploy & Test
-- [ ] Deploy to Fly.io (direct CLI deploy, no GitHub needed)
+- [x] Deploy to Railway (serverless, auto-sleep, $5 free credits)
 - [ ] Test with real players on multiple devices
 - [ ] Tweak balance: movement speed, throw speed, cooldown, arena size, fort placement
 - [ ] Mobile considerations: if needed, add on-screen touch controls (stretch goal)
