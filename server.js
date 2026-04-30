@@ -533,6 +533,10 @@ io.on("connection", (socket) => {
     broadcastLobby();
   });
 
+  socket.on("ping-measure", (cb) => {
+    if (typeof cb === "function") cb(Date.now());
+  });
+
   socket.on("disconnect", () => {
     const p = players.get(socket.id);
     if (p) console.log(`${p.name} disconnected`);
@@ -554,9 +558,74 @@ io.on("connection", (socket) => {
   });
 });
 
+// ── Server metrics ──
+const metrics = {
+  tickTimes: [],
+  maxTickTime: 0,
+  tickOverruns: 0,
+  totalTicks: 0,
+  startTime: Date.now(),
+};
+
+function tickWithMetrics() {
+  const start = performance.now();
+  tick();
+  const elapsed = performance.now() - start;
+  metrics.totalTicks++;
+  metrics.tickTimes.push(elapsed);
+  if (metrics.tickTimes.length > 200) metrics.tickTimes.shift();
+  if (elapsed > metrics.maxTickTime) metrics.maxTickTime = elapsed;
+  if (elapsed > TICK_MS) metrics.tickOverruns++;
+}
+
 // ── Game loop ──
-setInterval(tick, TICK_MS);
+setInterval(tickWithMetrics, TICK_MS);
+
+// ── Stats endpoint ──
+const statsHandler = (req, res) => {
+  if (req.url === "/stats") {
+    const times = metrics.tickTimes;
+    const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
+    const sorted = [...times].sort((a, b) => a - b);
+    const p95 = sorted[Math.floor(sorted.length * 0.95)] || 0;
+    const p99 = sorted[Math.floor(sorted.length * 0.99)] || 0;
+    const mem = process.memoryUsage();
+
+    const data = {
+      uptime: Math.round((Date.now() - metrics.startTime) / 1000),
+      players: players.size,
+      phase,
+      snowballs: snowballs.length,
+      tick: {
+        avgMs: Math.round(avg * 100) / 100,
+        p95Ms: Math.round(p95 * 100) / 100,
+        p99Ms: Math.round(p99 * 100) / 100,
+        maxMs: Math.round(metrics.maxTickTime * 100) / 100,
+        overruns: metrics.tickOverruns,
+        total: metrics.totalTicks,
+      },
+      memory: {
+        heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024 * 100) / 100,
+        heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024 * 100) / 100,
+        rssMB: Math.round(mem.rss / 1024 / 1024 * 100) / 100,
+      },
+    };
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(data, null, 2));
+    return true;
+  }
+  return false;
+};
+
+// Patch the http handler to check /stats first
+const originalListeners = httpServer.listeners("request");
+httpServer.removeAllListeners("request");
+httpServer.on("request", (req, res) => {
+  if (statsHandler(req, res)) return;
+  for (const listener of originalListeners) listener.call(httpServer, req, res);
+});
 
 httpServer.listen(PORT, () => {
   console.log(`Snowball Fight server running on http://localhost:${PORT}`);
+  console.log(`Server metrics available at http://localhost:${PORT}/stats`);
 });

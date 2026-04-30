@@ -367,6 +367,30 @@ To test multiplayer locally, open **multiple browser tabs** pointing at `http://
 
 For quick testing during development, add a `?bot=3` query param that spawns 3 server-side dummy players who stand still (Phase 2 dev convenience — not shipped to prod).
 
+### Stress Testing
+
+Bot stress test to simulate multiplayer load without needing real players:
+
+```bash
+# 8 bots, 60s duration, auto-starts game
+bun run stress-test.js
+
+# Custom options
+BOTS=10 DURATION=120 bun run stress-test.js
+
+# Against remote deployment
+SERVER=https://your-app.up.railway.app BOTS=8 DURATION=60 bun run stress-test.js
+
+# Don't auto-start (join manually as host, bots fill the lobby)
+AUTO_START=false BOTS=6 bun run stress-test.js
+```
+
+Outputs a report with tick timing, RTT latency, state intervals, and health warnings.
+
+**Server metrics**: Visit `http://localhost:3000/stats` during play for live JSON stats.
+
+**Browser overlay**: Press `` ` `` (backtick) during a game to toggle FPS/frame/state metrics. Heap tracking is Chrome-only; FPS and state intervals work in all browsers.
+
 ### Hot Reload (Dev Only)
 
 Bun supports `--watch` for server restarts on file change:
@@ -490,6 +514,17 @@ After ~20 minutes of real multiplayer play, multiple players experienced blank s
 - [x] Fixed splat jitter (stored random offsets once instead of regenerating per frame)
 - [x] Reduced network payload size (rounded floats to integers, aim angles to 2 decimal places)
 - [x] Pool-based lifecycle: objects are deactivated/reactivated, not created/destroyed each frame
+
+### Phase 7: Stress Testing & Metrics
+
+- [x] Bot stress test script (`stress-test.js`) — spawns N bots that play autonomously
+- [x] Server metrics endpoint (`/stats`) — tick timing (avg/p95/p99/max), memory, player count
+- [x] Bot-side RTT latency measurement via `ping-measure` event
+- [x] State broadcast interval tracking (detects server lag)
+- [x] Automated health check report with warnings for overruns/memory/latency
+- [x] Browser performance overlay (press backtick to toggle) — FPS, frame times, state intervals
+- [x] JS heap tracking with leak detection (Chrome only, graceful fallback on Firefox/Safari)
+- [x] Fixed server crash on directory path requests (EISDIR)
 
 ### Phase 5: Graphics Upgrade — Snowman Characters
 - [x] Evaluated external sprite packs (Winter Story, LPC, itch.io) — poor fit

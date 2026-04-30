@@ -1,6 +1,7 @@
 import { network } from "./network.js";
 import { initLobby, showLobby } from "./lobby.js";
 import { initGame, cleanup } from "./game.js";
+import { trackStateEvent } from "./perf-overlay.js";
 
 const screens = {
   lobby: document.getElementById("lobby-screen"),
@@ -109,6 +110,7 @@ function handleLobbyFromResults({ players, hostId, phase }) {
 // Track player names from game state for results
 let playerNames = {};
 network.on("state", (state) => {
+  trackStateEvent();
   for (const p of state.players) {
     playerNames[p.id] = p.name;
   }
