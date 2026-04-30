@@ -22,7 +22,7 @@ const keys = {};
 let aimAngle = 0;
 let chargeStart = 0;
 let isCharging = false;
-let splats = [];
+
 const MAX_SPLATS = 40;
 const SPLAT_LIFETIME = 5000;
 const SNOWBALL_ARC_HEIGHT = 40;
@@ -41,6 +41,90 @@ let prevPlayerPos = null;
 // Player tracking for HUD
 let currentPlayers = [];
 
+// --- Object pools ---
+let playerContainers = new Map(); // id -> { container, nameText, hpBar, bodyGfx, ... }
+let splatPool = []; // { graphics, time, x, y }
+let snowballPool = []; // { graphics, active }
+let footprintPool = []; // { graphics, time }
+let floatingTextPool = []; // { text, time }
+
+function getOrCreatePlayerContainer(p) {
+  if (playerContainers.has(p.id)) return playerContainers.get(p.id);
+
+  const container = new PIXI.Container();
+  container.sortableChildren = false;
+
+  const nameText = new PIXI.Text(p.name, {
+    fontSize: 11,
+    fill: 0x333333,
+    fontFamily: "Segoe UI, sans-serif",
+    fontWeight: "bold",
+  });
+  nameText.anchor.set(0.5, 1);
+  nameText.y = -PLAYER_RADIUS - 34;
+
+  const entry = { container, nameText, lastAlive: p.alive, lastHat: p.hat };
+  playerContainers.set(p.id, entry);
+  return entry;
+}
+
+function removePlayerContainer(id) {
+  const entry = playerContainers.get(id);
+  if (entry) {
+    entry.container.destroy({ children: true, texture: true, baseTexture: true });
+    entry.nameText.destroy(true);
+    playerContainers.delete(id);
+  }
+}
+
+function getPooledSplat() {
+  for (const s of splatPool) {
+    if (!s.active) return s;
+  }
+  const graphics = new PIXI.Graphics();
+  const entry = { graphics, active: false, time: 0, x: 0, y: 0 };
+  splatPool.push(entry);
+  return entry;
+}
+
+function getPooledSnowball() {
+  for (const s of snowballPool) {
+    if (!s.active) return s;
+  }
+  const graphics = new PIXI.Graphics();
+  const entry = { graphics, active: false };
+  snowballPool.push(entry);
+  return entry;
+}
+
+function getPooledFootprint() {
+  for (const f of footprintPool) {
+    if (!f.active) return f;
+  }
+  const graphics = new PIXI.Graphics();
+  const entry = { graphics, active: false, time: 0, x: 0, y: 0 };
+  footprintPool.push(entry);
+  return entry;
+}
+
+function getPooledFloatingText() {
+  for (const f of floatingTextPool) {
+    if (!f.active) return f;
+  }
+  const text = new PIXI.Text("-1", {
+    fontSize: 16,
+    fontWeight: "bold",
+    fill: 0xff4444,
+    fontFamily: "Segoe UI, sans-serif",
+    stroke: 0xffffff,
+    strokeThickness: 3,
+  });
+  text.anchor.set(0.5);
+  const entry = { text, active: false, time: 0, x: 0, y: 0, color: 0xff4444 };
+  floatingTextPool.push(entry);
+  return entry;
+}
+
 export function initGame(data, onGameOver) {
   const container = document.getElementById("game-canvas-container");
   container.innerHTML = "";
@@ -50,7 +134,7 @@ export function initGame(data, onGameOver) {
     height: ARENA_H,
     backgroundColor: 0xcce5ff,
     antialias: true,
-    resolution: window.devicePixelRatio || 1,
+    resolution: Math.min(window.devicePixelRatio || 1, 2),
     autoDensity: true,
   });
   container.appendChild(app.view);
@@ -186,7 +270,6 @@ function onKeyDown(e) {
       ["w", "a", "s", "d", "q", "e", "space"].includes(key)) {
     e.preventDefault();
   }
-  // Start charging on first space press (ignore repeats)
   if (key === "space" && !e.repeat && !isCharging && !isSpectating) {
     const now = Date.now();
     if (now - lastThrowTime >= THROW_COOLDOWN) {
@@ -199,7 +282,6 @@ function onKeyDown(e) {
 function onKeyUp(e) {
   const key = e.key === " " ? "space" : e.key.toLowerCase();
   keys[key] = false;
-  // Release space = throw with accumulated power
   if (key === "space" && isCharging) {
     const chargeTime = Date.now() - chargeStart;
     const power = Math.min(chargeTime / THROW_CHARGE_TIME, 1);
@@ -240,10 +322,20 @@ function sendInput() {
 }
 
 function renderState(state) {
+  const now = Date.now();
+
+  // Remove containers for players no longer in the game
+  const activeIds = new Set(state.players.map(p => p.id));
+  for (const [id] of playerContainers) {
+    if (!activeIds.has(id)) {
+      removePlayerContainer(id);
+    }
+  }
+
+  // Clear entity container — we re-add pooled objects each frame
+  // but we do NOT destroy them, just remove from display list
   entityContainer.removeChildren();
   uiContainer.removeChildren();
-
-  const now = Date.now();
 
   // Track own player for footprints
   const me = state.players.find(p => p.id === network.id);
@@ -257,11 +349,16 @@ function renderState(state) {
   }
   if (me) prevPlayerPos = { x: me.x, y: me.y };
 
-  // Draw footprints
-  footprints = footprints.filter(fp => now - fp.time < FOOTPRINT_LIFETIME);
-  for (const fp of footprints) {
+  // Draw footprints (pooled)
+  for (const fp of footprintPool) {
+    if (!fp.active) continue;
+    if (now - fp.time >= FOOTPRINT_LIFETIME) {
+      fp.active = false;
+      continue;
+    }
     const age = (now - fp.time) / FOOTPRINT_LIFETIME;
-    const g = new PIXI.Graphics();
+    const g = fp.graphics;
+    g.clear();
     g.beginFill(0xd8e2ec, 0.3 * (1 - age));
     g.drawEllipse(-3, 0, 3, 5);
     g.drawEllipse(3, 0, 3, 5);
@@ -272,10 +369,12 @@ function renderState(state) {
     entityContainer.addChild(g);
   }
 
-  // Draw eliminated players first (lower z)
+  // Draw eliminated players
   for (const p of state.players) {
     if (p.alive) continue;
-    const c = new PIXI.Container();
+    const entry = getOrCreatePlayerContainer(p);
+    const c = entry.container;
+    c.removeChildren();
     c.x = p.x;
     c.y = p.y;
     c.zIndex = p.y - 1;
@@ -286,7 +385,9 @@ function renderState(state) {
   // Draw alive players
   for (const p of state.players) {
     if (!p.alive) continue;
-    const c = new PIXI.Container();
+    const entry = getOrCreatePlayerContainer(p);
+    const c = entry.container;
+    c.removeChildren();
     c.x = p.x;
     c.y = p.y;
     c.zIndex = p.y;
@@ -298,9 +399,8 @@ function renderState(state) {
     }
     drawCharacter(c, drawData);
 
-    // Self-only visuals
+    // Self-only visuals: packing snow during cooldown
     if (p.id === network.id) {
-      // Packing snow visual during cooldown
       const cooldownElapsed = now - lastThrowTime;
       if (cooldownElapsed < THROW_COOLDOWN) {
         const pct = cooldownElapsed / THROW_COOLDOWN;
@@ -322,28 +422,28 @@ function renderState(state) {
     // HP bar
     drawHPBar(c, p.hp, p.maxHp);
 
-    // Name label
-    const nameText = new PIXI.Text(p.name, {
-      fontSize: 11,
-      fill: 0x333333,
-      fontFamily: "Segoe UI, sans-serif",
-      fontWeight: "bold",
-    });
-    nameText.anchor.set(0.5, 1);
+    // Name label (reuse cached text)
+    const nameText = entry.nameText;
+    if (nameText.text !== p.name) nameText.text = p.name;
     nameText.y = -PLAYER_RADIUS - 34;
     c.addChild(nameText);
 
     entityContainer.addChild(c);
   }
 
-  // Draw splats (snow marks on the ground)
-  splats = splats.filter(sp => now - sp.time < SPLAT_LIFETIME);
-  for (const sp of splats) {
+  // Draw splats (pooled, stable random via stored offsets)
+  for (const sp of splatPool) {
+    if (!sp.active) continue;
+    if (now - sp.time >= SPLAT_LIFETIME) {
+      sp.active = false;
+      continue;
+    }
     const age = (now - sp.time) / SPLAT_LIFETIME;
     const alpha = 0.4 * (1 - age);
-    const g = new PIXI.Graphics();
+    const g = sp.graphics;
+    g.clear();
     g.beginFill(0xffffff, alpha);
-    g.drawEllipse(0, 0, 18 + Math.random() * 4, 10 + Math.random() * 3);
+    g.drawEllipse(0, 0, 18 + sp.rx, 10 + sp.ry);
     g.endFill();
     g.beginFill(0xe8eef4, alpha * 0.6);
     g.drawEllipse(-6, 3, 9, 5);
@@ -356,23 +456,30 @@ function renderState(state) {
     entityContainer.addChild(g);
   }
 
-  // Draw snowballs with arc
-  for (const s of state.snowballs) {
+  // Draw snowballs (pooled)
+  // First deactivate all snowball pool entries
+  for (const s of snowballPool) s.active = false;
+
+  for (let i = 0; i < state.snowballs.length; i++) {
+    const s = state.snowballs[i];
     const p = s.progress || 0;
     const arcHeight = Math.sin(p * Math.PI) * SNOWBALL_ARC_HEIGHT;
     const scale = 1 + Math.sin(p * Math.PI) * 0.3;
 
-    const g = new PIXI.Graphics();
+    const pooled = getPooledSnowball();
+    pooled.active = true;
+    const g = pooled.graphics;
+    g.clear();
     g.zIndex = s.y + 1000;
 
-    // Shadow on the ground (spreads as ball goes higher)
+    // Shadow
     const shadowScale = 1 + arcHeight / 30;
     const shadowAlpha = 0.15 - (arcHeight / SNOWBALL_ARC_HEIGHT) * 0.08;
     g.beginFill(0x000000, Math.max(0.04, shadowAlpha));
     g.drawEllipse(0, arcHeight, 5 * shadowScale, 2.5 * shadowScale);
     g.endFill();
 
-    // Ball (drawn offset upward by arc height)
+    // Ball
     g.beginFill(0xffffff);
     g.drawCircle(0, -arcHeight, 8 * scale);
     g.endFill();
@@ -390,19 +497,16 @@ function renderState(state) {
     entityContainer.addChild(g);
   }
 
-  // Draw floating damage texts
-  floatingTexts = floatingTexts.filter(ft => now - ft.time < FLOAT_LIFETIME);
-  for (const ft of floatingTexts) {
+  // Draw floating damage texts (pooled)
+  for (const ft of floatingTextPool) {
+    if (!ft.active) continue;
+    if (now - ft.time >= FLOAT_LIFETIME) {
+      ft.active = false;
+      continue;
+    }
     const age = (now - ft.time) / FLOAT_LIFETIME;
-    const t = new PIXI.Text("-1", {
-      fontSize: 16,
-      fontWeight: "bold",
-      fill: ft.color,
-      fontFamily: "Segoe UI, sans-serif",
-      stroke: 0xffffff,
-      strokeThickness: 3,
-    });
-    t.anchor.set(0.5);
+    const t = ft.text;
+    t.style.fill = ft.color;
     t.x = ft.x;
     t.y = ft.y - PLAYER_RADIUS - 20 - age * FLOAT_RISE;
     t.alpha = 1 - age;
@@ -438,7 +542,6 @@ function updateCooldownBar() {
   const cooldownPct = Math.min(elapsed / THROW_COOLDOWN, 1);
 
   if (isCharging) {
-    // Show charge power
     const chargeTime = Date.now() - chargeStart;
     const chargePct = Math.min(chargeTime / THROW_CHARGE_TIME, 1);
     bar.style.width = `${chargePct * 100}%`;
@@ -450,17 +553,58 @@ function updateCooldownBar() {
 }
 
 function addSplat(x, y) {
-  splats.push({ x, y, time: Date.now() });
-  if (splats.length > MAX_SPLATS) splats.shift();
+  // Count active splats
+  let activeCount = 0;
+  let oldest = null;
+  for (const s of splatPool) {
+    if (s.active) {
+      activeCount++;
+      if (!oldest || s.time < oldest.time) oldest = s;
+    }
+  }
+  // Recycle oldest if at limit
+  if (activeCount >= MAX_SPLATS && oldest) {
+    oldest.active = false;
+  }
+
+  const entry = getPooledSplat();
+  entry.active = true;
+  entry.time = Date.now();
+  entry.x = x;
+  entry.y = y;
+  // Store random offsets once so they don't jitter
+  entry.rx = Math.random() * 4;
+  entry.ry = Math.random() * 3;
 }
 
 function addFloatingText(x, y, text, color) {
-  floatingTexts.push({ x, y, text, color, time: Date.now() });
+  const entry = getPooledFloatingText();
+  entry.active = true;
+  entry.time = Date.now();
+  entry.x = x;
+  entry.y = y;
+  entry.color = color;
 }
 
 function addFootprint(x, y) {
-  footprints.push({ x, y, time: Date.now() });
-  if (footprints.length > MAX_FOOTPRINTS) footprints.shift();
+  // Count active footprints
+  let activeCount = 0;
+  let oldest = null;
+  for (const f of footprintPool) {
+    if (f.active) {
+      activeCount++;
+      if (!oldest || f.time < oldest.time) oldest = f;
+    }
+  }
+  if (activeCount >= MAX_FOOTPRINTS && oldest) {
+    oldest.active = false;
+  }
+
+  const entry = getPooledFootprint();
+  entry.active = true;
+  entry.time = Date.now();
+  entry.x = x;
+  entry.y = y;
 }
 
 function addKillFeedEntry(text) {
@@ -484,15 +628,41 @@ export function cleanup() {
   document.removeEventListener("keydown", onKeyDown);
   document.removeEventListener("keyup", onKeyUp);
   window.removeEventListener("resize", scaleCanvas);
+
+  // Destroy all pooled objects properly
+  for (const [id] of playerContainers) {
+    removePlayerContainer(id);
+  }
+  playerContainers.clear();
+
+  for (const s of splatPool) {
+    s.graphics.destroy({ children: true, texture: true, baseTexture: true });
+  }
+  splatPool = [];
+
+  for (const s of snowballPool) {
+    s.graphics.destroy({ children: true, texture: true, baseTexture: true });
+  }
+  snowballPool = [];
+
+  for (const f of footprintPool) {
+    f.graphics.destroy({ children: true, texture: true, baseTexture: true });
+  }
+  footprintPool = [];
+
+  for (const f of floatingTextPool) {
+    f.text.destroy(true);
+  }
+  floatingTextPool = [];
+
   if (app) {
     app.ticker.remove(sendInput);
-    app.destroy(true);
+    app.destroy(true, { children: true, texture: true, baseTexture: true });
     app = null;
   }
   document.getElementById("kill-feed").innerHTML = "";
   document.getElementById("team-info").innerHTML = "";
   Object.keys(keys).forEach((k) => delete keys[k]);
-  splats = [];
   floatingTexts = [];
   footprints = [];
   prevPlayerPos = null;

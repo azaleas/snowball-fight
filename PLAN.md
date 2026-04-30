@@ -419,6 +419,21 @@ We tried Fly.io first but found it impractical for free-tier use:
 
 ---
 
+## Production Learnings (Post-Playtest)
+
+After ~20 minutes of real multiplayer play, multiple players experienced blank screens and browser crashes. Root causes:
+
+1. **GPU texture leak**: `renderState()` called `removeChildren()` 20x/second without `.destroy()`, leaking GPU textures. Each `new PIXI.Text()` per frame generated texture uploads that never got cleaned up.
+2. **Object churn**: Creating hundreds of PIXI.Graphics and PIXI.Text objects per second caused severe GC pressure and long pauses.
+3. **Firefox performed better** because its WebGL implementation handles texture churn differently — Chrome's GPU process would OOM-crash entirely.
+4. **High-DPI screens compounded the issue**: 3x Retina displays rendered 9x more pixels, hitting GPU limits faster.
+
+**Fix**: Object pooling. Player containers, splats, snowballs, footprints, and floating text are now allocated once and reused via active/inactive flags. PIXI.Text objects are cached per-player. Resolution is capped at 2x. All objects are properly `.destroy()`ed with texture cleanup on game end.
+
+**Key rule**: In a PixiJS game loop, never `new` display objects inside the render function. Allocate at init, reuse via pools, destroy only on cleanup.
+
+---
+
 ## Implementation Order
 
 ### Phase 1: Skeleton
@@ -464,6 +479,17 @@ We tried Fly.io first but found it impractical for free-tier use:
 - [ ] Test with real players on multiple devices
 - [ ] Tweak balance: movement speed, throw speed, cooldown, arena size, fort placement
 - [ ] Mobile considerations: if needed, add on-screen touch controls (stretch goal)
+
+### Phase 6: Performance Fix — Object Pooling & Memory Management
+
+- [x] Diagnosed crash after ~20 minutes: GPU texture leak from recreating PIXI objects every frame
+- [x] Implemented object pooling for player containers, splats, snowballs, footprints, floating text
+- [x] Cached PIXI.Text objects per player (was creating 200+ texture uploads/second)
+- [x] Proper `.destroy()` calls with texture cleanup on game end
+- [x] Capped resolution to 2x max (prevents 3x Retina screens from overloading GPU)
+- [x] Fixed splat jitter (stored random offsets once instead of regenerating per frame)
+- [x] Reduced network payload size (rounded floats to integers, aim angles to 2 decimal places)
+- [x] Pool-based lifecycle: objects are deactivated/reactivated, not created/destroyed each frame
 
 ### Phase 5: Graphics Upgrade — Snowman Characters
 - [x] Evaluated external sprite packs (Winter Story, LPC, itch.io) — poor fit

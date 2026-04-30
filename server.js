@@ -1,5 +1,5 @@
 import { createServer } from "http";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, statSync } from "fs";
 import { join } from "path";
 import { Server } from "socket.io";
 
@@ -313,18 +313,24 @@ function tick() {
     }
   }
 
-  // Broadcast state
+  // Broadcast state (compact: round positions to integers, skip unchanged static fields)
+  const now = Date.now();
   const playerStates = [];
   for (const [id, p] of players) {
     playerStates.push({
-      id, name: p.name, team: p.team, x: p.x, y: p.y,
+      id, name: p.name, team: p.team,
+      x: Math.round(p.x), y: Math.round(p.y),
       hp: p.hp, maxHp: MAX_HP, alive: p.alive, hat: p.hat,
-      aimAngle: p.aimAngle, isThrowing: Date.now() - p.lastThrow < 300,
+      aimAngle: Math.round(p.aimAngle * 100) / 100,
+      isThrowing: now - p.lastThrow < 300,
       moving: p.moveX !== 0 || p.moveY !== 0,
     });
   }
 
-  const snowballStates = snowballs.map(s => ({ x: s.x, y: s.y, team: s.team, progress: s.progress }));
+  const snowballStates = snowballs.map(s => ({
+    x: Math.round(s.x), y: Math.round(s.y),
+    team: s.team, progress: Math.round(s.progress * 100) / 100,
+  }));
 
   io.emit("state", { players: playerStates, snowballs: snowballStates });
 }
@@ -392,7 +398,7 @@ const httpServer = createServer((req, res) => {
   let filePath = req.url === "/" ? "/index.html" : req.url.split("?")[0];
   const fullPath = join(publicDir, filePath);
 
-  if (existsSync(fullPath)) {
+  if (existsSync(fullPath) && !statSync(fullPath).isDirectory()) {
     const ext = filePath.substring(filePath.lastIndexOf("."));
     const contentType = MIME[ext] || "application/octet-stream";
     const data = readFileSync(fullPath);
