@@ -14,7 +14,7 @@ The game aims to capture the **Snowcraft feel**: isometric 3/4 top-down view, cl
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| Runtime | Bun (with Node http module) | Faster than Node, uses Node's createServer for Socket.IO compatibility |
+| Runtime | Bun (native serve + @socket.io/bun-engine) | ~50% less memory than Node polyfill, native WebSocket handling |
 | Frontend Rendering | PixiJS (v7, via CDN) | Sprite management, z-sorting, tinting, animation — handles rendering grunt work |
 | Frontend Logic | Vanilla JS | No framework needed — lobby is simple DOM, game is all PixiJS canvas |
 | Real-time | Socket.IO | Proven WebSocket lib, auto-reconnect, rooms |

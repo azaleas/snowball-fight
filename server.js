@@ -1,6 +1,6 @@
-import { createServer } from "http";
-import { readFileSync, existsSync, statSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 import { join } from "path";
+import { Server as Engine } from "@socket.io/bun-engine";
 import { Server } from "socket.io";
 
 const PORT = process.env.PORT || 3000;
@@ -18,7 +18,7 @@ const SNOWBALL_SPEED_MAX = 30;
 const SNOWBALL_MAX_DIST_MIN = ARENA_W * 0.15;
 const SNOWBALL_MAX_DIST_MAX = ARENA_W * 1.2;
 const THROW_COOLDOWN = 600;
-const THROW_CHARGE_TIME = 800; // ms to reach full charge
+const THROW_CHARGE_TIME = 800;
 const MAX_HP = 5;
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 11;
@@ -35,7 +35,7 @@ function generateForts() {
   const forts = [];
   const margin = 80;
   const halfW = ARENA_W / 2;
-  const fortCount = 5 + Math.floor(Math.random() * 3); // 5-7 per side
+  const fortCount = 5 + Math.floor(Math.random() * 3);
 
   for (let side = 0; side < 2; side++) {
     const minX = side === 0 ? margin : halfW + margin;
@@ -97,7 +97,7 @@ function generateTeamNames() {
 }
 
 // ── Game state ──
-let phase = "lobby"; // lobby | playing | results
+let phase = "lobby";
 let players = new Map();
 let snowballs = [];
 let hostId = null;
@@ -173,15 +173,10 @@ function circleCircle(x1, y1, r1, x2, y2, r2) {
   return dx * dx + dy * dy < (r1 + r2) * (r1 + r2);
 }
 
-function rectRect(x1, y1, w1, h1, x2, y2, w2, h2) {
-  return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
-}
-
 function clampPlayerToArenaAndForts(p) {
   p.x = Math.max(PLAYER_RADIUS, Math.min(ARENA_W - PLAYER_RADIUS, p.x));
   p.y = Math.max(PLAYER_RADIUS, Math.min(ARENA_H - PLAYER_RADIUS, p.y));
 
-  // Teams can't cross the center line
   const center = ARENA_W / 2;
   if (p.team === 0) {
     p.x = Math.min(p.x, center - PLAYER_RADIUS);
@@ -206,7 +201,6 @@ function clampPlayerToArenaAndForts(p) {
 function tick() {
   if (phase !== "playing") return;
 
-  // Update player positions
   for (const [id, p] of players) {
     if (!p.alive) continue;
     p.x += p.moveX * PLAYER_SPEED;
@@ -214,7 +208,6 @@ function tick() {
     clampPlayerToArenaAndForts(p);
   }
 
-  // Player-player collision (push apart)
   const alive = [...players.values()].filter(p => p.alive);
   for (let i = 0; i < alive.length; i++) {
     for (let j = i + 1; j < alive.length; j++) {
@@ -238,23 +231,19 @@ function tick() {
     }
   }
 
-  // Update snowballs
   for (let i = snowballs.length - 1; i >= 0; i--) {
     const s = snowballs[i];
     s.x += Math.cos(s.angle) * s.speed;
     s.y += Math.sin(s.angle) * s.speed;
     s.dist += s.speed;
-
     s.progress = s.dist / s.maxDist;
 
-    // Out of bounds or max distance
     if (s.x < 0 || s.x > ARENA_W || s.y < 0 || s.y > ARENA_H || s.dist > s.maxDist) {
       io.emit("splat", { x: s.x, y: s.y });
       snowballs.splice(i, 1);
       continue;
     }
 
-    // Fort collision
     let hitFort = false;
     for (const fort of activeForts) {
       if (circleRect(s.x, s.y, SNOWBALL_RADIUS, fort.x - FORT_W / 2, fort.y - FORT_H / 2, FORT_W, FORT_H)) {
@@ -268,7 +257,6 @@ function tick() {
       continue;
     }
 
-    // Player collision
     let hitPlayer = false;
     for (const [pid, p] of players) {
       if (!p.alive || pid === s.ownerId) continue;
@@ -278,7 +266,6 @@ function tick() {
         hitPlayer = true;
 
         if (sameTeam) {
-          // Friendly fire: teammate takes damage
           p.hp--;
           io.emit("hit", { targetId: pid, attackerId: s.ownerId, hpLeft: p.hp, friendlyFire: true });
           if (p.hp <= 0) {
@@ -287,15 +274,11 @@ function tick() {
             checkWinCondition();
           }
         } else {
-          // Enemy hit
           p.hp--;
-
           if (!stats.hits[s.ownerId]) stats.hits[s.ownerId] = 0;
           stats.hits[s.ownerId]++;
           if (!stats.firstBlood) stats.firstBlood = s.ownerId;
-
           io.emit("hit", { targetId: pid, attackerId: s.ownerId, hpLeft: p.hp });
-
           if (p.hp <= 0) {
             p.alive = false;
             if (!stats.eliminations[s.ownerId]) stats.eliminations[s.ownerId] = 0;
@@ -313,7 +296,6 @@ function tick() {
     }
   }
 
-  // Broadcast state (compact: round positions to integers, skip unchanged static fields)
   const now = Date.now();
   const playerStates = [];
   for (const [id, p] of players) {
@@ -361,7 +343,6 @@ function updateHost() {
     hostId = null;
     return;
   }
-  // "alan" always gets host priority
   for (const [id, p] of players) {
     if (p.name.toLowerCase() === "alan") {
       hostId = id;
@@ -381,39 +362,10 @@ function broadcastLobby() {
   io.emit("lobby-update", { players: list, hostId, phase, barriersEnabled, friendlyFireEnabled });
 }
 
-// ── HTTP server ──
-const publicDir = join(import.meta.dir, "public");
-
-const MIME = {
-  ".html": "text/html",
-  ".css": "text/css",
-  ".js": "text/javascript",
-  ".png": "image/png",
-  ".mp3": "audio/mpeg",
-  ".ogg": "audio/ogg",
-  ".wav": "audio/wav",
-};
-
-const httpServer = createServer((req, res) => {
-  let filePath = req.url === "/" ? "/index.html" : req.url.split("?")[0];
-  const fullPath = join(publicDir, filePath);
-
-  if (existsSync(fullPath) && !statSync(fullPath).isDirectory()) {
-    const ext = filePath.substring(filePath.lastIndexOf("."));
-    const contentType = MIME[ext] || "application/octet-stream";
-    const data = readFileSync(fullPath);
-    res.writeHead(200, { "Content-Type": contentType });
-    res.end(data);
-  } else {
-    res.writeHead(404);
-    res.end("Not found");
-  }
-});
-
-// ── Socket.IO ──
-const io = new Server(httpServer, {
-  cors: { origin: "*" },
-});
+// ── Socket.IO with Bun-native engine ──
+const io = new Server();
+const engine = new Engine({ path: "/socket.io/" });
+io.bind(engine);
 
 io.on("connection", (socket) => {
   console.log(`Connected: ${socket.id}`);
@@ -578,54 +530,89 @@ function tickWithMetrics() {
   if (elapsed > TICK_MS) metrics.tickOverruns++;
 }
 
-// ── Game loop ──
 setInterval(tickWithMetrics, TICK_MS);
 
-// ── Stats endpoint ──
-const statsHandler = (req, res) => {
-  if (req.url === "/stats") {
-    const times = metrics.tickTimes;
-    const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
-    const sorted = [...times].sort((a, b) => a - b);
-    const p95 = sorted[Math.floor(sorted.length * 0.95)] || 0;
-    const p99 = sorted[Math.floor(sorted.length * 0.99)] || 0;
-    const mem = process.memoryUsage();
+// ── Static file serving + stats ──
+const publicDir = join(import.meta.dir, "public");
 
-    const data = {
-      uptime: Math.round((Date.now() - metrics.startTime) / 1000),
-      players: players.size,
-      phase,
-      snowballs: snowballs.length,
-      tick: {
-        avgMs: Math.round(avg * 100) / 100,
-        p95Ms: Math.round(p95 * 100) / 100,
-        p99Ms: Math.round(p99 * 100) / 100,
-        maxMs: Math.round(metrics.maxTickTime * 100) / 100,
-        overruns: metrics.tickOverruns,
-        total: metrics.totalTicks,
-      },
-      memory: {
-        heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024 * 100) / 100,
-        heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024 * 100) / 100,
-        rssMB: Math.round(mem.rss / 1024 / 1024 * 100) / 100,
-      },
-    };
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(data, null, 2));
-    return true;
-  }
-  return false;
+const MIME = {
+  ".html": "text/html",
+  ".css": "text/css",
+  ".js": "text/javascript",
+  ".png": "image/png",
+  ".mp3": "audio/mpeg",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
+  ".json": "application/json",
 };
 
-// Patch the http handler to check /stats first
-const originalListeners = httpServer.listeners("request");
-httpServer.removeAllListeners("request");
-httpServer.on("request", (req, res) => {
-  if (statsHandler(req, res)) return;
-  for (const listener of originalListeners) listener.call(httpServer, req, res);
-});
+function handleStats() {
+  const times = metrics.tickTimes;
+  const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
+  const sorted = [...times].sort((a, b) => a - b);
+  const p95 = sorted[Math.floor(sorted.length * 0.95)] || 0;
+  const p99 = sorted[Math.floor(sorted.length * 0.99)] || 0;
+  const mem = process.memoryUsage();
 
-httpServer.listen(PORT, () => {
-  console.log(`Snowball Fight server running on http://localhost:${PORT}`);
-  console.log(`Server metrics available at http://localhost:${PORT}/stats`);
-});
+  return Response.json({
+    uptime: Math.round((Date.now() - metrics.startTime) / 1000),
+    players: players.size,
+    phase,
+    snowballs: snowballs.length,
+    tick: {
+      avgMs: Math.round(avg * 100) / 100,
+      p95Ms: Math.round(p95 * 100) / 100,
+      p99Ms: Math.round(p99 * 100) / 100,
+      maxMs: Math.round(metrics.maxTickTime * 100) / 100,
+      overruns: metrics.tickOverruns,
+      total: metrics.totalTicks,
+    },
+    memory: {
+      heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024 * 100) / 100,
+      heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024 * 100) / 100,
+      rssMB: Math.round(mem.rss / 1024 / 1024 * 100) / 100,
+    },
+  });
+}
+
+function serveStatic(pathname) {
+  const filePath = pathname === "/" ? "/index.html" : pathname;
+  const fullPath = join(publicDir, filePath);
+
+  if (existsSync(fullPath) && !statSync(fullPath).isDirectory()) {
+    const ext = filePath.substring(filePath.lastIndexOf("."));
+    const contentType = MIME[ext] || "application/octet-stream";
+    return new Response(readFileSync(fullPath), {
+      headers: { "Content-Type": contentType },
+    });
+  }
+
+  return new Response("Not found", { status: 404 });
+}
+
+// ── Bun native server ──
+const engineHandler = engine.handler();
+
+export default {
+  port: PORT,
+  idleTimeout: 30,
+  fetch(req, server) {
+    const url = new URL(req.url);
+    const pathname = url.pathname;
+
+    if (pathname === "/stats") {
+      return handleStats();
+    }
+
+    // Let Socket.IO engine handle its path
+    if (pathname.startsWith("/socket.io/")) {
+      return engineHandler.fetch(req, server);
+    }
+
+    return serveStatic(pathname);
+  },
+  websocket: engineHandler.websocket,
+};
+
+console.log(`Snowball Fight server running on http://localhost:${PORT}`);
+console.log(`Server metrics available at http://localhost:${PORT}/stats`);

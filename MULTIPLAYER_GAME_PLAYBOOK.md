@@ -1,0 +1,462 @@
+# Multiplayer Party Game Playbook
+
+Reusable architecture, patterns, and hard-won lessons for building browser-based multiplayer party games. Designed for small teams deploying to resource-constrained environments (Railway free tier, Fly.io, etc).
+
+---
+
+## Tech Stack (Proven)
+
+| Layer | Choice | Why |
+|-------|--------|-----|
+| Runtime | Bun | Fast startup, native TS support, low memory footprint — ideal for free-tier servers |
+| Server framework | `@socket.io/bun-engine` + Socket.IO | Bun-native WebSocket handling, ~50% less memory than Node polyfill |
+| Frontend rendering | PixiJS v7 (CDN) | Hardware-accelerated 2D, sprite management, z-sorting — handles 10+ players smoothly |
+| Frontend logic | Vanilla JS (ES modules) | No build step, no bundler, instant iteration |
+| Transport | WebSocket-only | Always set `transports: ["websocket"]` on client — mixed polling+WS causes routing issues on multi-machine deployments |
+| Hosting | Railway (serverless mode) | $5 free credits, auto-sleep when idle, wakes on traffic, WebSocket support |
+
+**No build step. No bundler. No database.** All game state lives in server memory. PixiJS from CDN, everything else is plain JS served as static files.
+
+---
+
+## Architecture: Server-Authoritative Model
+
+The server owns all game state. Clients send inputs and render. This prevents cheating and keeps all players in sync.
+
+```
+Client                          Server
+  |                               |
+  |-- input (move, aim, action) -->
+  |                               |-- validate & update state
+  |<-- game state broadcast -------|
+  |                               |
+  (render from server state)
+```
+
+### Server Responsibilities
+- Player positions, HP, alive/dead status
+- Projectile positions, trajectories, lifetime
+- Hit detection (circle-circle, circle-rect)
+- Game phase transitions (lobby → playing → results)
+- Tick rate: **20 updates/second** (50ms budget per tick)
+
+### Client Responsibilities
+- Capture input, send to server every frame
+- Receive state snapshots, render from them
+- Local-only effects (particles, screen flash, sound)
+- HUD rendering (HP bars, kill feed, team roster)
+
+### Key Rule
+> Never trust the client. Validate everything server-side. The client is just a view.
+
+---
+
+## Game Flow Pattern
+
+Every game follows this three-screen pattern:
+
+### Screen 1: Lobby
+- Player enters name (persisted in localStorage)
+- First player = host (can start game, toggle options)
+- Player list updates in real-time
+- Host sees options (toggles, checkboxes) and "Start Game" button
+- If host disconnects, next player becomes host
+- Minimum player check before start is allowed
+
+### Screen 2: Game
+- Server assigns teams/roles and spawns players
+- Real-time gameplay at 20 ticks/second
+- Eliminated players enter spectator mode
+- Win condition checked after every relevant event
+
+### Screen 3: Results
+- Winning team/player displayed
+- Stats: MVP, eliminations, first blood, etc.
+- Host can restart → everyone returns to lobby
+
+### Host Priority
+For party settings, let a specific name always get host priority (e.g., the organizer):
+```js
+function updateHost() {
+  for (const [id, p] of players) {
+    if (p.name.toLowerCase() === "organizer_name") {
+      hostId = id;
+      return;
+    }
+  }
+  if (!players.has(hostId)) {
+    hostId = players.keys().next().value;
+  }
+}
+```
+
+---
+
+## Team Assignment
+
+### Two Teams
+```js
+function assignTeams(playerIds) {
+  // Shuffle
+  for (let i = playerIds.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]];
+  }
+  const half = Math.ceil(playerIds.length / 2);
+  // First half = team 0, second half = team 1
+  // Balanced ±1 player
+}
+```
+
+### Free-For-All
+Each player is their own "team" — just skip the team assignment and allow damage to everyone.
+
+---
+
+## Funny Team Name Generator
+
+Random combination: `The [Adjective] [Noun]` — Futurama-style absurdist/bureaucratic humor. Silly and safe.
+
+Pick adjective and noun pairs without replacement within a game (no duplicate words across both names).
+
+**Adjective pool (20+):** Bureaucratically Frozen, Technically Alive, Mildly Defrosted, Suspiciously Warm, Mostly Harmless, Legally Distinct, Emotionally Unavailable, Slightly Damp, Nominally Competent, Aggressively Mediocre, Tragically Hip, Weaponized, Sentient, Hyper-Caffeinated, Reluctantly Heroic, Suspiciously Cheerful, Gloriously Incompetent, Cosmically Unlucky, Diplomatically Immune, Existentially Confused
+
+**Noun pool (20+):** Adjust per game theme. Keep them absurd, not edgy.
+
+---
+
+## Sound Design
+
+### Philosophy
+- **Muted by default** — party games are often played in groups with conversation; don't blast audio unexpectedly
+- **Persisted in localStorage** — respect the player's choice across sessions
+- **Preload at game start** — zero-latency playback when it matters
+- **Random pitch/volume variation** — prevents repetitive audio fatigue
+
+### Implementation Approach
+1. **Phase 1**: No sound. Get gameplay working first.
+2. **Phase 2**: Kenney CC0 audio packs for basic SFX (impacts, whooshes). Free, no attribution required.
+3. **Phase 3**: Procedural Web Audio API for unique sounds (jingles, buzzers). No file dependencies.
+
+### Recommended Sources
+- [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) (CC0)
+- [Kenney RPG Audio](https://kenney.nl/assets/rpg-audio) (CC0)
+- Procedural Web Audio for distinctive game events
+
+---
+
+## Performance: Critical Lessons
+
+### The #1 Rule for PixiJS Games
+
+> **Never create display objects inside the render loop.** Allocate at init, reuse via pools, destroy only on cleanup.
+
+Violations of this rule cause:
+- GPU texture leaks → blank screen after 15-20 minutes
+- GC pressure → frame stutters and freezes
+- Browser GPU process OOM → tab crash (especially Chrome)
+
+### Object Pooling Pattern
+
+```js
+let pool = [];
+
+function getFromPool() {
+  for (const item of pool) {
+    if (!item.active) return item;
+  }
+  const newItem = { graphics: new PIXI.Graphics(), active: false };
+  pool.push(newItem);
+  return newItem;
+}
+
+// In render loop: reuse, don't recreate
+function render(state) {
+  for (const item of pool) item.active = false;
+
+  for (const entity of state.entities) {
+    const pooled = getFromPool();
+    pooled.active = true;
+    pooled.graphics.clear();
+    // ... redraw
+  }
+}
+
+// On cleanup: destroy everything
+function cleanup() {
+  for (const item of pool) {
+    item.graphics.destroy({ children: true, texture: true, baseTexture: true });
+  }
+  pool = [];
+}
+```
+
+### PIXI.Text is Expensive
+Each `new PIXI.Text()` creates an offscreen canvas, renders text to it, and uploads a texture to the GPU. With 10 players at 20fps, that's 200 texture uploads/second.
+
+**Fix**: Create one Text object per player at join time. Update `.text` property when the name changes (rare). Cache it in a Map keyed by player ID.
+
+### Resolution Cap
+Always cap `resolution` to prevent 3x Retina screens from rendering 9x pixels:
+```js
+new PIXI.Application({
+  resolution: Math.min(window.devicePixelRatio || 1, 2),
+  autoDensity: true,
+});
+```
+
+### removeChildren() vs destroy()
+- `container.removeChildren()` removes from display list but does NOT free GPU memory
+- You must call `.destroy({ children: true, texture: true, baseTexture: true })` to actually free resources
+- In a pool-based system: `removeChildren()` each frame is fine (we re-add from pool), but `destroy()` only on full cleanup
+
+### Network Payload
+- Round positions to integers (saves ~30% payload size over floats)
+- Round angles to 2 decimal places
+- Don't send unchanged static fields every tick if you can avoid it
+- Socket.IO adds overhead — keep individual messages small
+
+---
+
+## Rendering Best Practices
+
+### Container Hierarchy (back to front)
+1. **Ground** — static background, drawn once
+2. **Terrain/obstacles** — drawn once at game start
+3. **Entities** — players, projectiles, effects — `sortableChildren = true`, use `zIndex = y` for depth
+4. **UI overlay** — HP bars, name labels, attached to entity containers
+5. **HUD** — DOM-based (team roster, kill feed, score) — don't render HTML in canvas
+
+### Code-Drawn vs Sprites
+For party games, code-drawn graphics (PixiJS Graphics) are often better than sprites:
+- Zero external dependencies
+- Full control over colors, animations, team tinting
+- No asset pipeline or loading screens
+- Easy to generate unique variations per player
+- Works at any resolution
+
+### Scaling
+```js
+function scaleCanvas() {
+  const scaleX = container.clientWidth / ARENA_W;
+  const scaleY = container.clientHeight / ARENA_H;
+  const scale = Math.min(scaleX, scaleY, 1); // never upscale
+  app.view.style.width = `${ARENA_W * scale}px`;
+  app.view.style.height = `${ARENA_H * scale}px`;
+}
+```
+
+---
+
+## Deployment: Resource-Constrained Environments
+
+### Railway (Recommended)
+- $5 free credits, 30-day trial, no credit card
+- Enable **Serverless** mode → $0 when idle, auto-wakes on traffic (~5s cold start)
+- Actual cost: ~$0.04/hour during active play
+- WebSocket support works out of the box
+
+### Key Deployment Rules
+1. **Always use WebSocket-only transport** — mixed polling+WS breaks on multi-machine setups
+2. **Single instance** — in-memory game state means you can't scale horizontally (fine for party games)
+3. **Stateless between games** — no database needed, state resets naturally
+4. **Environment variables**: only `PORT` (Railway sets this automatically)
+
+### Bun-Native Server Setup
+
+Use `@socket.io/bun-engine` instead of Node's `createServer` — it uses Bun's native HTTP/WebSocket for ~50% less memory:
+
+```js
+import { Server as Engine } from "@socket.io/bun-engine";
+import { Server } from "socket.io";
+
+const io = new Server();
+const engine = new Engine({ path: "/socket.io/" });
+io.bind(engine);
+
+const engineHandler = engine.handler();
+
+export default {
+  port: process.env.PORT || 3000,
+  idleTimeout: 30, // MUST exceed Socket.IO's pingInterval (25s default)
+  fetch(req, server) {
+    const url = new URL(req.url);
+    if (url.pathname.startsWith("/socket.io/")) {
+      return engineHandler.fetch(req, server);
+    }
+    return serveStatic(url.pathname);
+  },
+  websocket: engineHandler.websocket,
+};
+```
+
+**Key:** `idleTimeout: 30` is required. If it's less than Socket.IO's 25s ping interval, connections will be silently dropped.
+
+### Static File Serving
+
+Handle it in the `fetch` handler (no Express needed):
+```js
+function serveStatic(pathname) {
+  const filePath = pathname === "/" ? "/index.html" : pathname;
+  const fullPath = join(publicDir, filePath);
+
+  if (existsSync(fullPath) && !statSync(fullPath).isDirectory()) {
+    const ext = filePath.substring(filePath.lastIndexOf("."));
+    return new Response(readFileSync(fullPath), {
+      headers: { "Content-Type": MIME[ext] || "application/octet-stream" },
+    });
+  }
+  return new Response("Not found", { status: 404 });
+}
+```
+
+**Always check `isDirectory()`** — Socket.IO can hit paths that resolve to directories, crashing with EISDIR.
+
+---
+
+## Stress Testing
+
+### Bot Stress Test Pattern
+A script that spawns N fake players via Socket.IO. Each bot:
+- Connects and joins lobby
+- First bot is host, auto-starts when all bots are in
+- Sends random inputs at 20fps (matches server tick)
+- Changes behavior every 0.5-2s (move, strafe, stop, aim)
+- Reacts to hits (dodge) and eliminations (stop inputs)
+- Host auto-restarts after game over
+
+### What to Measure
+
+**Server-side (via `/stats` endpoint):**
+- Tick execution time: avg, p95, p99, max
+- Tick overruns (exceeded 50ms budget)
+- Heap memory usage over time (leak detection)
+- Player count, snowball/projectile count
+
+**Bot-side (in stress test report):**
+- Round-trip latency (RTT) via ping-measure event
+- State broadcast interval consistency (should be ~50ms)
+- Disconnection count
+
+**Browser-side (perf overlay, toggle with backtick):**
+- FPS (color-coded: green ≥55, yellow ≥30, red <30)
+- Frame time: avg, p95, max
+- State event interval (are server updates arriving on time?)
+- JS heap usage with leak detection (Chrome-only, graceful fallback)
+
+### Stress Test Usage
+```bash
+# Quick local test
+BOTS=8 DURATION=60 bun run stress-test.js
+
+# Extended soak test (find memory leaks)
+BOTS=10 DURATION=300 bun run stress-test.js
+
+# Test remote deployment
+SERVER=https://your-app.up.railway.app BOTS=8 DURATION=120 bun run stress-test.js
+
+# Manual host mode (you join in browser, bots fill lobby)
+AUTO_START=false BOTS=6 bun run stress-test.js
+```
+
+### Health Check Thresholds
+- Tick p95 > 40ms → approaching budget, investigate
+- Tick max > 50ms → budget exceeded, players will notice lag
+- Heap > 100MB → possible memory leak
+- RTT p95 > 100ms → network issues or server overload
+- Any bot disconnections → stability problem
+
+---
+
+## Browser Compatibility Notes
+
+| Feature | Chrome | Firefox | Safari |
+|---------|--------|---------|--------|
+| WebSocket | Yes | Yes | Yes |
+| PixiJS / WebGL | Yes | Yes | Yes |
+| performance.memory (heap) | Yes | No | No |
+| requestAnimationFrame | Yes | Yes | Yes |
+| Web Audio API | Yes | Yes | Yes (needs user gesture) |
+
+- **Firefox handles GPU texture churn more gracefully** than Chrome — Chrome's GPU process will OOM-crash, Firefox degrades more gradually
+- **Safari requires a user gesture** before playing audio — always gate sound behind a click/keypress
+- **Mobile Safari** aggressively throttles background tabs and requestAnimationFrame
+- The perf overlay's heap tracking returns "N/A" on Firefox/Safari (graceful fallback, no crash)
+
+---
+
+## Project Structure Template
+
+```
+game-name/
+├── server.js              # Bun HTTP + Socket.IO, game loop, all server logic
+├── stress-test.js         # Bot stress test (dev only)
+├── package.json           # Minimal deps: socket.io, socket.io-client
+├── .gitignore             # node_modules/, .DS_Store, *.log, .env, .claude/
+├── public/
+│   ├── index.html         # Single HTML file, loads PixiJS from CDN
+│   ├── css/
+│   │   └── style.css      # Lobby, HUD, results styling
+│   ├── sounds/            # Kenney CC0 audio files (.ogg)
+│   └── js/
+│       ├── main.js        # Entry point, screen manager
+│       ├── lobby.js       # Lobby screen (DOM-based)
+│       ├── game.js        # PixiJS app, game loop, input, object pools
+│       ├── renderer.js    # Drawing functions (characters, terrain, projectiles)
+│       ├── sounds.js      # Audio playback, preloading, mute toggle
+│       ├── network.js     # Socket.IO client wrapper
+│       ├── constants.js   # Shared config (speeds, sizes, cooldowns)
+│       └── perf-overlay.js # FPS/memory/state metrics overlay
+├── PLAN.md                # Game design doc
+└── README.md              # How to run + deploy
+```
+
+---
+
+## Common Gotchas
+
+1. **EISDIR crash**: Always check `statSync(path).isDirectory()` before `readFileSync()` in your static file handler. Socket.IO polling will hit directory paths.
+
+2. **Host disconnect**: If the host leaves mid-game, you must handle it — either promote a new host or reset everyone to lobby.
+
+3. **Refresh protection**: Add `beforeunload` warning during active gameplay. Players WILL accidentally hit Cmd+R.
+
+4. **Player name persistence**: Save to localStorage so players don't re-type every refresh.
+
+5. **Center line / boundary enforcement**: If teams have sides, enforce server-side. Never trust client positioning.
+
+6. **Friendly fire**: Make it a toggle. Default off. When on, use distinct sound + visual (different color floating text) so players know it was a teammate.
+
+7. **Min player count**: Set MIN_PLAYERS to 2 for dev/testing, but the game should be designed for 4+ in practice.
+
+8. **Event listener cleanup**: On game end, remove ALL event listeners (keyboard, resize, network). Leaked listeners from previous rounds cause double-firing bugs.
+
+9. **Socket.IO `.off()` before `.on()`**: When reinitializing a game, always remove previous listeners before adding new ones, or you get duplicate event handlers.
+
+10. **Tick timing**: Use `setInterval` for the game loop, not `requestAnimationFrame` on the server. The server tick must be independent of any rendering.
+
+---
+
+## Development Workflow
+
+1. `bun install` → `bun run server.js`
+2. Open multiple browser tabs for manual multiplayer testing
+3. Use stress test for sustained load testing
+4. Check `/stats` endpoint for server health
+5. Press backtick in browser for client-side metrics
+6. Deploy: `railway up` (or equivalent)
+
+No HMR, no hot reload for client — just refresh the browser. Server restart with `bun --watch run server.js` in dev.
+
+---
+
+## What NOT to Do
+
+- Don't use Express — `@socket.io/bun-engine` with Bun's native serve is enough and uses less memory
+- Don't add a database — in-memory state is fine for party games that reset between rounds
+- Don't add a build step — ES modules + CDN libraries = instant iteration
+- Don't create display objects in the render loop — pool everything
+- Don't trust client input — validate and clamp server-side
+- Don't use polling transport — WebSocket-only, always
+- Don't deploy multiple instances — in-memory state can't be shared
+- Don't skip the stress test before a real playtest — 20 minutes of 8 players will find bugs that 2 minutes of 2 tabs won't
