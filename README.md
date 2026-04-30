@@ -28,10 +28,10 @@ bun --watch run server.js
 ## Features
 
 - **State interpolation** — 60fps smooth rendering between 20Hz server ticks
-- **Input prediction** — instant local movement with server reconciliation
 - **AFK detection** — 15s no input marks AFK, 25s total kicks from game
-- **Reconnection grace period** — 10s to rejoin with same name after disconnect
+- **Disconnect = elimination** — instant elimination, rejoin as spectator next round
 - **Late join as spectator** — watch current game, auto-join next lobby
+- **Host disconnect recovery** — all players auto-return to lobby and rejoin
 - **Tab visibility handling** — pauses rendering when tab hidden, resumes cleanly
 - **Object pooling** — zero GPU texture leaks, stable memory over hours of play
 

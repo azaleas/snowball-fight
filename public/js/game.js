@@ -46,11 +46,7 @@ let stateTimestamp = 0;
 let prevStateTimestamp = 0;
 const TICK_MS = 50; // server sends at 20fps
 
-// --- Input prediction ---
-const PLAYER_SPEED = 7;
-let predictedX = 0;
-let predictedY = 0;
-let hasPrediction = false;
+// --- Input prediction (disabled — interpolation is sufficient at <10ms latency) ---
 
 // --- Tab visibility ---
 let tabHidden = false;
@@ -87,8 +83,10 @@ function getOrCreatePlayerContainer(p) {
 function removePlayerContainer(id) {
   const entry = playerContainers.get(id);
   if (entry) {
-    entry.container.destroy({ children: true, texture: true, baseTexture: true });
+    if (entry.container.parent) entry.container.parent.removeChild(entry.container);
+    if (entry.nameText.parent) entry.nameText.parent.removeChild(entry.nameText);
     entry.nameText.destroy(true);
+    entry.container.destroy({ children: true, texture: true, baseTexture: true });
     playerContainers.delete(id);
   }
 }
@@ -157,11 +155,6 @@ function getInterpolatedPlayers() {
     const pp = prevState.players.find(p => p.id === cp.id);
     if (!pp) return cp;
 
-    // For own player with prediction, use predicted position
-    if (cp.id === network.id && hasPrediction) {
-      return { ...cp, x: predictedX, y: predictedY };
-    }
-
     return {
       ...cp,
       x: lerp(pp.x, cp.x, t),
@@ -211,17 +204,16 @@ export function initGame(data, onGameOver) {
   myTeam = me ? me.team : 0;
   aimAngle = me ? me.aimAngle : 0;
   lastThrowTime = 0;
-  isSpectating = false;
+  isSpectating = !!data.lateJoin;
   prevState = null;
   currState = null;
-  hasPrediction = false;
 
-  if (me) {
-    predictedX = me.x;
-    predictedY = me.y;
+  if (isSpectating) {
+    document.getElementById("spectator-banner").classList.remove("hidden");
+    document.getElementById("spectator-banner").textContent = "Spectating — you'll join the next game";
+  } else {
+    document.getElementById("spectator-banner").classList.add("hidden");
   }
-
-  document.getElementById("spectator-banner").classList.add("hidden");
   updateTeamHUD(data.players);
 
   preloadSounds();
@@ -264,22 +256,6 @@ export function initGame(data, onGameOver) {
     prevStateTimestamp = stateTimestamp;
     currState = state;
     stateTimestamp = Date.now();
-
-    // Reconcile prediction with server state
-    const me = state.players.find(p => p.id === network.id);
-    if (me) {
-      const dx = Math.abs(predictedX - me.x);
-      const dy = Math.abs(predictedY - me.y);
-      // If prediction drifted too far, snap to server
-      if (dx > PLAYER_SPEED * 3 || dy > PLAYER_SPEED * 3) {
-        predictedX = me.x;
-        predictedY = me.y;
-      } else {
-        // Blend toward server position
-        predictedX = lerp(predictedX, me.x, 0.3);
-        predictedY = lerp(predictedY, me.y, 0.3);
-      }
-    }
 
     currentPlayers = state.players;
     updateTeamHUD(state.players);
@@ -355,8 +331,12 @@ export function initGame(data, onGameOver) {
 
 function renderLoop() {
   if (!currState) return;
-  const interpolatedPlayers = getInterpolatedPlayers();
-  renderState({ players: interpolatedPlayers, snowballs: currState.snowballs });
+  try {
+    const interpolatedPlayers = getInterpolatedPlayers();
+    renderState({ players: interpolatedPlayers, snowballs: currState.snowballs });
+  } catch (e) {
+    console.error("Render error:", e);
+  }
 }
 
 function scaleCanvas() {
@@ -412,6 +392,9 @@ function onVisibilityChange() {
   }
 }
 
+let lastInputSend = 0;
+const INPUT_SEND_INTERVAL = 1000 / 30; // Send input at 30fps (more than enough for 20fps server)
+
 function sendInput() {
   if (isSpectating) return;
 
@@ -426,18 +409,12 @@ function sendInput() {
 
   if (mx !== 0 || my !== 0) playFootstep();
 
-  // Local prediction: apply movement immediately
-  if (mx !== 0 || my !== 0) {
-    hasPrediction = true;
-    const len = Math.sqrt(mx * mx + my * my);
-    const nmx = len > 1 ? mx / len : mx;
-    const nmy = len > 1 ? my / len : my;
-    predictedX += nmx * PLAYER_SPEED;
-    predictedY += nmy * PLAYER_SPEED;
-    // Basic bounds clamping
-    predictedX = Math.max(PLAYER_RADIUS, Math.min(ARENA_W / 2 - PLAYER_RADIUS, predictedX));
-    predictedY = Math.max(PLAYER_RADIUS, Math.min(ARENA_H - PLAYER_RADIUS, predictedY));
-  }
+  const now = performance.now();
+  const hasThrow = pendingThrow !== null;
+
+  // Throttle input sends to 30fps (throws always send immediately)
+  if (!hasThrow && now - lastInputSend < INPUT_SEND_INTERVAL) return;
+  lastInputSend = now;
 
   const msg = {
     move: { x: mx, y: my },
@@ -445,7 +422,7 @@ function sendInput() {
     throwing: false,
   };
 
-  if (pendingThrow !== null) {
+  if (hasThrow) {
     msg.throwing = true;
     msg.power = pendingThrow;
     pendingThrow = null;
@@ -461,7 +438,9 @@ function renderState(state) {
   const activeIds = new Set(state.players.map(p => p.id));
   for (const [id] of playerContainers) {
     if (!activeIds.has(id)) {
-      removePlayerContainer(id);
+      const entry = playerContainers.get(id);
+      if (entry && entry.container.parent) entry.container.parent.removeChild(entry.container);
+      playerContainers.delete(id);
     }
   }
 
@@ -815,5 +794,4 @@ export function cleanup() {
   prevState = null;
   currState = null;
   prevPlayerPos = null;
-  hasPrediction = false;
 }

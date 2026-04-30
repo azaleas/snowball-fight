@@ -36,12 +36,38 @@ initLobby((data) => {
   initGame(data, showResults);
 });
 
-// Host left during game — return everyone to lobby
+// Host left during game — return everyone to lobby and auto-rejoin
 network.on("host-left", () => {
+  if (inGame) cleanup();
   inGame = false;
-  cleanup();
   showScreen("lobby");
-  showLobby();
+  showLobby(true);
+});
+
+// Safety net: if we receive lobby-update while in-game, host must have reset
+network.on("lobby-update", ({ phase }) => {
+  if (phase === "lobby" && inGame) {
+    cleanup();
+    inGame = false;
+    showScreen("lobby");
+    showLobby(true);
+  }
+});
+
+// Late join — player joined while game in progress, spectate until next round
+let isLateJoiner = false;
+network.on("late-join", (data) => {
+  isLateJoiner = true;
+  inGame = true;
+  showScreen("game");
+  initGame({ ...data, players: [], lateJoin: true }, (result) => {
+    // Late joiners skip results and go straight to lobby for next game
+    isLateJoiner = false;
+    inGame = false;
+    cleanup();
+    showScreen("lobby");
+    showLobby(true);
+  });
 });
 
 function showResults(result) {

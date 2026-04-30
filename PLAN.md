@@ -478,6 +478,42 @@ Bot stress test (8 bots, 60s) with `@socket.io/bun-engine`:
 
 The 3s max state interval spike is expected during game-over → lobby → restart transitions (no state events broadcast during that gap).
 
+### Input Prediction: When NOT to Use
+
+Client-side prediction was implemented (apply local movement instantly, reconcile with server via 0.3 blend factor) but **removed after playtesting** because:
+
+- At <10ms latency (LAN/same machine), prediction causes visible rubber-banding — the client moves 3x faster than server (60fps × speed vs 20fps × speed), then the blend yanks it back
+- Players see their character in two places simultaneously during direction changes
+- Interpolation alone produces smooth movement at low latency since the 50ms tick gap is small enough
+
+**Rule**: Only add prediction if latency exceeds ~80ms (cross-region play). For party games on the same network, interpolation is sufficient and simpler.
+
+### Host Disconnect Handling
+
+When the host refreshes mid-game, all other players must return to lobby. Key details:
+- Server clears all players from the game state on host disconnect
+- Server emits `host-left` event followed by `lobby-update` (safety net)
+- Clients auto-rejoin lobby using their saved name (localStorage)
+- Without this, non-host players get a black screen (game canvas with no state updates)
+- Safety net: clients that receive `lobby-update` while `inGame=true` force-return to lobby (covers race conditions)
+
+### Non-Host Disconnect Handling
+
+When a non-host player disconnects (refresh, wifi, close tab) mid-game:
+- **Eliminate immediately** — no grace period. Their character dies and the game continues.
+- If they come back, they join as spectator until next round.
+- Grace period reconnection sounds good in theory but causes game freezes (stale player in state, team balance issues, win condition stalls).
+
+### PixiJS Container Lifecycle in Render Loop
+
+When removing players from the render loop mid-game, **never `.destroy()` a container that might still be referenced by the stage**. The sequence `destroyContainer()` → `entityContainer.removeChildren()` crashes because PixiJS tries to manipulate a destroyed object, killing the ticker silently (canvas freezes, DOM keeps working).
+
+**Fix**: Detach from parent and remove from tracking map, but defer `.destroy()` to game cleanup. Containers without active references use negligible memory.
+
+### Input Throttling
+
+Sending input every frame (60fps) causes diagonal movement jitter — keys register on different frames, so the server briefly sees (1,0) before (1,1). Throttle input sends to 30fps (still well above the 20Hz tick rate). Throws bypass the throttle for instant response.
+
 ---
 
 ## Implementation Order
@@ -529,13 +565,24 @@ The 3s max state interval spike is expected during game-over → lobby → resta
 ### Phase 8: Smoothness & Resilience
 
 - [x] State interpolation — lerp between server snapshots for 60fps-smooth movement despite 20fps updates
-- [x] Input prediction — own player movement applied locally, reconciled with server state on each tick
+- [x] ~~Input prediction~~ — removed after playtesting (caused rubber-banding/double-player at <10ms latency, interpolation alone is sufficient)
 - [x] Tab visibility detection — sends heartbeat on return, prevents ghost frozen players
 - [x] AFK detection & kick — 15s no input = marked AFK, 10s more = eliminated and kicked
-- [x] Reconnection grace period — 10s window to reconnect (same name) without losing game state
+- [x] ~~Reconnection grace period~~ — removed (caused game freezes); disconnect = immediate elimination, rejoin as spectator
 - [x] Late join as spectator — players joining mid-game watch current round, auto-join next lobby
 - [x] AFK/disconnect events broadcast to all players via kill feed
 - [x] Heartbeat system — client pings server every 5s to stay alive even when idle
+
+### Phase 9: Stability Fixes (Post-Playtest #2)
+
+- [x] Removed input prediction — caused jank/double player at low latency; interpolation alone is smooth
+- [x] Fixed AFK not clearing — heartbeat now properly clears AFK flag and broadcasts `player-returned`
+- [x] Fixed host refresh black screen — all players kicked to lobby and auto-rejoin with saved name
+- [x] Late join spectator client UI — late joiners see game canvas with "Spectating" banner, auto-join next lobby
+- [x] Non-host disconnect = immediate elimination (no grace period that freezes the game)
+- [x] Fixed PixiJS ticker crash on player leave — detach containers instead of destroying mid-render
+- [x] Added lobby-update safety net — clients force-return to lobby if they receive it while in-game
+- [x] Throttled input sends to 30fps — fixes diagonal movement jitter from per-frame key sampling
 
 ### Phase 6: Performance Fix — Object Pooling & Memory Management
 

@@ -86,12 +86,20 @@ function doJoin() {
   lobbyInfo.classList.remove("hidden");
 }
 
-export function showLobby() {
+export function showLobby(autoRejoin = false) {
   joined = false;
   errorMsg.classList.add("hidden");
-  joinForm.classList.remove("hidden");
-  lobbyInfo.classList.add("hidden");
   const saved = localStorage.getItem(STORAGE_KEY);
   nameInput.value = saved || "";
-  nameInput.focus();
+
+  if (autoRejoin && saved) {
+    joined = true;
+    network.emit("join", { name: saved });
+    joinForm.classList.add("hidden");
+    lobbyInfo.classList.remove("hidden");
+  } else {
+    joinForm.classList.remove("hidden");
+    lobbyInfo.classList.add("hidden");
+    nameInput.focus();
+  }
 }

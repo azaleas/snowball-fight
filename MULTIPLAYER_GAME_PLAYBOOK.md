@@ -77,9 +77,17 @@ function getInterpolatedPosition(playerId) {
 }
 ```
 
-### Input Prediction
+### Input Prediction (When to Skip It)
 
-Your own character has ~50ms input lag (round trip to server). Apply movement locally, then reconcile with server state:
+Prediction applies local movement instantly and blends toward server state. Sounds good in theory, but for **party games on the same network** (<10ms latency), it causes more harm than good:
+
+- Client applies movement at 60fps, server at 20fps → 3x position drift per frame
+- The blend-back causes visible rubber-banding and "double character" artifacts
+- Direction changes feel mushy because the blend pulls the player backward
+
+**Rule of thumb**: Only implement prediction if expected latency exceeds ~80ms (cross-region). For LAN/same-network party games, interpolation alone is smooth enough.
+
+If you do need prediction (high-latency scenario):
 
 ```js
 // On input: apply locally
@@ -122,12 +130,14 @@ When a browser tab goes background, `requestAnimationFrame` throttles to ~1fps a
 
 Players are notified via kill feed. If the player returns (sends any input), the AFK state clears and "X is back!" is broadcast.
 
-### Reconnection Grace Period
+### Disconnect = Immediate Elimination
 
-If a player disconnects mid-game (WiFi blip, accidental close):
-1. Server holds their slot for 10 seconds (stop their movement, broadcast "disconnected")
-2. If they reconnect within 10s (same name), restore their full state (position, HP, team)
-3. If grace period expires, remove them and check win condition
+If a player disconnects mid-game (WiFi blip, refresh, close tab):
+1. Server eliminates them immediately and broadcasts the elimination
+2. If they come back (same name or new), they join as spectator until next round
+3. No grace period — grace periods cause game freezes (stale state, win condition stalls)
+
+This is simpler and more reliable than trying to hold slots. For a party game, losing your spot on disconnect is acceptable — the round is short anyway.
 
 ### Late Join as Spectator
 
@@ -530,7 +540,7 @@ game-name/
 
 1. **EISDIR crash**: Always check `statSync(path).isDirectory()` before `readFileSync()` in your static file handler. Socket.IO polling will hit directory paths.
 
-2. **Host disconnect**: If the host leaves mid-game, you must handle it — either promote a new host or reset everyone to lobby.
+2. **Host disconnect**: If the host leaves mid-game, clear all players from server state, emit a `host-left` event, and have clients auto-rejoin lobby using their saved name. Without this, non-host players get a permanent black screen (game canvas with no state updates).
 
 3. **Refresh protection**: Add `beforeunload` warning during active gameplay. Players WILL accidentally hit Cmd+R.
 
@@ -545,6 +555,14 @@ game-name/
 8. **Event listener cleanup**: On game end, remove ALL event listeners (keyboard, resize, network). Leaked listeners from previous rounds cause double-firing bugs.
 
 9. **Socket.IO `.off()` before `.on()`**: When reinitializing a game, always remove previous listeners before adding new ones, or you get duplicate event handlers.
+
+10. **Non-host disconnect mid-game**: Eliminate the player immediately. Don't use grace periods — they cause game freezes (stale player state, win condition stalls). If they reconnect, they spectate until next round.
+
+11. **PixiJS container destroy in render loop**: Never `.destroy()` a container that's still a child of the stage. The sequence `destroy()` → `parent.removeChildren()` crashes the ticker silently (canvas freezes, DOM keeps working). Instead: detach from parent, remove from your tracking map, defer `.destroy()` to game cleanup.
+
+12. **Input send rate**: Don't send input every frame (60fps). Throttle to 30fps or match your server tick rate. At 60fps, diagonal keys register on different frames causing jitter — the server briefly sees (1,0) before (1,1).
+
+13. **Lobby-update safety net**: If a client receives a `lobby-update` with `phase === "lobby"` while it thinks it's in-game, force-return to lobby. This catches race conditions where `host-left` was missed.
 
 10. **Tick timing**: Use `setInterval` for the game loop, not `requestAnimationFrame` on the server. The server tick must be independent of any rendering.
 
