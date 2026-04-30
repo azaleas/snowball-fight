@@ -96,9 +96,14 @@ function generateTeamNames() {
   return [`The ${adj1} ${noun1}`, `The ${adj2} ${noun2}`];
 }
 
+// ── AFK & Reconnection constants ──
+const AFK_TIMEOUT = 15000; // 15s no input = kicked
+const RECONNECT_GRACE = 10000; // 10s to reconnect before slot is freed
+
 // ── Game state ──
 let phase = "lobby";
 let players = new Map();
+let disconnectedPlayers = new Map(); // id -> { player, timer, originalId }
 let snowballs = [];
 let hostId = null;
 let teamNames = [];
@@ -108,6 +113,25 @@ function resetGame() {
   phase = "lobby";
   snowballs = [];
   stats = { hits: {}, eliminations: {}, firstBlood: null };
+
+  // Clear disconnected players
+  for (const [, dc] of disconnectedPlayers) clearTimeout(dc.timer);
+  disconnectedPlayers.clear();
+
+  // Add any late-join spectators to the player pool for next round
+  for (const [, s] of io.sockets.sockets) {
+    if (s.data && s.data.waitingForLobby && !players.has(s.id)) {
+      players.set(s.id, {
+        name: s.data.name,
+        team: null, hp: MAX_HP, alive: true,
+        x: 0, y: 0, aimAngle: 0, lastThrow: 0,
+        moveX: 0, moveY: 0, hat: "beanie",
+        lastInput: Date.now(), afk: false,
+      });
+      s.data.waitingForLobby = false;
+    }
+  }
+
   for (const [id, p] of players) {
     p.team = null;
     p.hp = MAX_HP;
@@ -118,6 +142,8 @@ function resetGame() {
     p.lastThrow = 0;
     p.moveX = 0;
     p.moveY = 0;
+    p.lastInput = Date.now();
+    p.afk = false;
   }
 }
 
@@ -200,6 +226,30 @@ function clampPlayerToArenaAndForts(p) {
 // ── Game tick ──
 function tick() {
   if (phase !== "playing") return;
+
+  // AFK detection
+  const now = Date.now();
+  for (const [id, p] of players) {
+    if (!p.alive || p.afk) continue;
+    if (now - p.lastInput > AFK_TIMEOUT) {
+      p.afk = true;
+      p.moveX = 0;
+      p.moveY = 0;
+      io.emit("player-afk", { playerId: id, name: p.name, reason: "inactive" });
+      console.log(`${p.name} marked AFK (no input for ${AFK_TIMEOUT / 1000}s)`);
+
+      // Kick after another grace period
+      setTimeout(() => {
+        const player = players.get(id);
+        if (player && player.afk && player.alive) {
+          player.alive = false;
+          io.emit("elimination", { playerId: id, killerId: null, afkKick: true });
+          console.log(`${player.name} kicked for AFK`);
+          checkWinCondition();
+        }
+      }, RECONNECT_GRACE);
+    }
+  }
 
   for (const [id, p] of players) {
     if (!p.alive) continue;
@@ -296,7 +346,6 @@ function tick() {
     }
   }
 
-  const now = Date.now();
   const playerStates = [];
   for (const [id, p] of players) {
     playerStates.push({
@@ -306,6 +355,7 @@ function tick() {
       aimAngle: Math.round(p.aimAngle * 100) / 100,
       isThrowing: now - p.lastThrow < 300,
       moving: p.moveX !== 0 || p.moveY !== 0,
+      afk: p.afk || false,
     });
   }
 
@@ -371,29 +421,59 @@ io.on("connection", (socket) => {
   console.log(`Connected: ${socket.id}`);
 
   socket.on("join", ({ name }) => {
-    if (players.size >= MAX_PLAYERS) {
+    if (players.size >= MAX_PLAYERS && phase === "lobby") {
       socket.emit("error-msg", { message: "Game is full" });
       return;
     }
     if (phase === "playing") {
-      socket.emit("error-msg", { message: "Game already in progress" });
+      // Late join — auto-spectate, will join next round
+      name = (name || "Player").trim().slice(0, 16);
+      socket.join("spectators");
+      socket.emit("late-join", {
+        phase,
+        teamNames,
+        forts: activeForts.map(f => ({ x: f.x, y: f.y, w: FORT_W, h: FORT_H })),
+      });
+      // Store them so they join the next lobby
+      socket.data = { name, waitingForLobby: true };
+      console.log(`${name} joined as spectator (game in progress)`);
       return;
     }
 
     name = (name || "Player").trim().slice(0, 16);
-    players.set(socket.id, {
-      name,
-      team: null,
-      hp: MAX_HP,
-      alive: true,
-      x: 0,
-      y: 0,
-      aimAngle: 0,
-      lastThrow: 0,
-      moveX: 0,
-      moveY: 0,
-      hat: "beanie",
-    });
+
+    // Check if this is a reconnecting player
+    let reconnected = false;
+    for (const [oldId, dc] of disconnectedPlayers) {
+      if (dc.player.name === name) {
+        clearTimeout(dc.timer);
+        disconnectedPlayers.delete(oldId);
+        dc.player.afk = false;
+        dc.player.lastInput = Date.now();
+        players.set(socket.id, dc.player);
+        reconnected = true;
+        console.log(`${name} reconnected`);
+        break;
+      }
+    }
+
+    if (!reconnected) {
+      players.set(socket.id, {
+        name,
+        team: null,
+        hp: MAX_HP,
+        alive: true,
+        x: 0,
+        y: 0,
+        aimAngle: 0,
+        lastThrow: 0,
+        moveX: 0,
+        moveY: 0,
+        hat: "beanie",
+        lastInput: Date.now(),
+        afk: false,
+      });
+    }
 
     updateHost();
     broadcastLobby();
@@ -439,10 +519,21 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("heartbeat", () => {
+    const p = players.get(socket.id);
+    if (p) p.lastInput = Date.now();
+  });
+
   socket.on("input", (data) => {
     if (phase !== "playing") return;
     const p = players.get(socket.id);
     if (!p || !p.alive) return;
+
+    p.lastInput = Date.now();
+    if (p.afk) {
+      p.afk = false;
+      io.emit("player-returned", { playerId: socket.id, name: p.name });
+    }
 
     if (data.move) {
       let mx = data.move.x || 0;
@@ -509,20 +600,39 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     const p = players.get(socket.id);
-    if (p) console.log(`${p.name} disconnected`);
+    if (!p) return;
+    console.log(`${p.name} disconnected`);
     const wasHost = socket.id === hostId;
-    players.delete(socket.id);
-    updateHost();
 
-    if (phase === "lobby") {
-      broadcastLobby();
-    } else if (phase === "playing" || phase === "results") {
-      if (wasHost) {
-        resetGame();
-        io.emit("host-left");
-        broadcastLobby();
-      } else if (phase === "playing") {
+    if (phase === "playing" && p.alive && !wasHost) {
+      // Grace period: hold their slot for reconnection
+      p.moveX = 0;
+      p.moveY = 0;
+      const oldId = socket.id;
+      players.delete(socket.id);
+      const timer = setTimeout(() => {
+        disconnectedPlayers.delete(oldId);
+        console.log(`${p.name} grace period expired, removed`);
+        updateHost();
         checkWinCondition();
+      }, RECONNECT_GRACE);
+      disconnectedPlayers.set(oldId, { player: p, timer });
+      io.emit("player-afk", { playerId: oldId, name: p.name, reason: "disconnected" });
+      updateHost();
+    } else {
+      players.delete(socket.id);
+      updateHost();
+
+      if (phase === "lobby") {
+        broadcastLobby();
+      } else if (phase === "playing" || phase === "results") {
+        if (wasHost) {
+          resetGame();
+          io.emit("host-left");
+          broadcastLobby();
+        } else if (phase === "playing") {
+          checkWinCondition();
+        }
       }
     }
   });

@@ -27,11 +27,9 @@ const MAX_SPLATS = 40;
 const SPLAT_LIFETIME = 5000;
 const SNOWBALL_ARC_HEIGHT = 40;
 
-let floatingTexts = [];
 const FLOAT_LIFETIME = 800;
 const FLOAT_RISE = 30;
 
-let footprints = [];
 const MAX_FOOTPRINTS = 60;
 const FOOTPRINT_LIFETIME = 3000;
 const FOOTPRINT_INTERVAL = 150;
@@ -41,12 +39,30 @@ let prevPlayerPos = null;
 // Player tracking for HUD
 let currentPlayers = [];
 
+// --- State interpolation ---
+let prevState = null;
+let currState = null;
+let stateTimestamp = 0;
+let prevStateTimestamp = 0;
+const TICK_MS = 50; // server sends at 20fps
+
+// --- Input prediction ---
+const PLAYER_SPEED = 7;
+let predictedX = 0;
+let predictedY = 0;
+let hasPrediction = false;
+
+// --- Tab visibility ---
+let tabHidden = false;
+let tabHiddenSince = 0;
+let heartbeatInterval = null;
+
 // --- Object pools ---
-let playerContainers = new Map(); // id -> { container, nameText, hpBar, bodyGfx, ... }
-let splatPool = []; // { graphics, time, x, y }
-let snowballPool = []; // { graphics, active }
-let footprintPool = []; // { graphics, time }
-let floatingTextPool = []; // { text, time }
+let playerContainers = new Map();
+let splatPool = [];
+let snowballPool = [];
+let footprintPool = [];
+let floatingTextPool = [];
 
 function getOrCreatePlayerContainer(p) {
   if (playerContainers.has(p.id)) return playerContainers.get(p.id);
@@ -125,6 +141,35 @@ function getPooledFloatingText() {
   return entry;
 }
 
+// --- Interpolation helper ---
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function getInterpolatedPlayers() {
+  if (!prevState || !currState) return currState ? currState.players : [];
+
+  const now = Date.now();
+  const elapsed = now - stateTimestamp;
+  const t = Math.min(elapsed / TICK_MS, 1);
+
+  return currState.players.map(cp => {
+    const pp = prevState.players.find(p => p.id === cp.id);
+    if (!pp) return cp;
+
+    // For own player with prediction, use predicted position
+    if (cp.id === network.id && hasPrediction) {
+      return { ...cp, x: predictedX, y: predictedY };
+    }
+
+    return {
+      ...cp,
+      x: lerp(pp.x, cp.x, t),
+      y: lerp(pp.y, cp.y, t),
+    };
+  });
+}
+
 export function initGame(data, onGameOver) {
   const container = document.getElementById("game-canvas-container");
   container.innerHTML = "";
@@ -167,6 +212,14 @@ export function initGame(data, onGameOver) {
   aimAngle = me ? me.aimAngle : 0;
   lastThrowTime = 0;
   isSpectating = false;
+  prevState = null;
+  currState = null;
+  hasPrediction = false;
+
+  if (me) {
+    predictedX = me.x;
+    predictedY = me.y;
+  }
 
   document.getElementById("spectator-banner").classList.add("hidden");
   updateTeamHUD(data.players);
@@ -185,16 +238,49 @@ export function initGame(data, onGameOver) {
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("keyup", onKeyUp);
 
+  // Tab visibility
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  tabHidden = false;
+  tabHiddenSince = 0;
+
+  // Heartbeat (keeps server aware we're alive even if not moving)
+  heartbeatInterval = setInterval(() => {
+    network.emit("heartbeat");
+  }, 5000);
+
   // Remove any previous listeners before adding new ones
   network.socket.off("state");
   network.socket.off("hit");
   network.socket.off("elimination");
   network.socket.off("game-over");
   network.socket.off("splat");
+  network.socket.off("player-afk");
+  network.socket.off("player-returned");
 
   // Network events
   network.on("state", (state) => {
-    renderState(state);
+    // Interpolation: shift states
+    prevState = currState;
+    prevStateTimestamp = stateTimestamp;
+    currState = state;
+    stateTimestamp = Date.now();
+
+    // Reconcile prediction with server state
+    const me = state.players.find(p => p.id === network.id);
+    if (me) {
+      const dx = Math.abs(predictedX - me.x);
+      const dy = Math.abs(predictedY - me.y);
+      // If prediction drifted too far, snap to server
+      if (dx > PLAYER_SPEED * 3 || dy > PLAYER_SPEED * 3) {
+        predictedX = me.x;
+        predictedY = me.y;
+      } else {
+        // Blend toward server position
+        predictedX = lerp(predictedX, me.x, 0.3);
+        predictedY = lerp(predictedY, me.y, 0.3);
+      }
+    }
+
     currentPlayers = state.players;
     updateTeamHUD(state.players);
     updateCooldownBar();
@@ -223,17 +309,33 @@ export function initGame(data, onGameOver) {
     }
   });
 
-  network.on("elimination", ({ playerId, killerId }) => {
+  network.on("elimination", ({ playerId, killerId, afkKick }) => {
     const dead = currentPlayers.find((p) => p.id === playerId);
-    const killer = currentPlayers.find((p) => p.id === killerId);
-    if (dead && killer) {
-      addKillFeedEntry(`${killer.name} eliminated ${dead.name}!`);
-      playElimination();
+    if (afkKick) {
+      if (dead) addKillFeedEntry(`${dead.name} was kicked for being AFK`);
+    } else {
+      const killer = currentPlayers.find((p) => p.id === killerId);
+      if (dead && killer) {
+        addKillFeedEntry(`${killer.name} eliminated ${dead.name}!`);
+        playElimination();
+      }
     }
     if (playerId === network.id) {
       isSpectating = true;
       document.getElementById("spectator-banner").classList.remove("hidden");
     }
+  });
+
+  network.on("player-afk", ({ name, reason }) => {
+    if (reason === "disconnected") {
+      addKillFeedEntry(`${name} disconnected (waiting to reconnect...)`);
+    } else {
+      addKillFeedEntry(`${name} is AFK`);
+    }
+  });
+
+  network.on("player-returned", ({ name }) => {
+    addKillFeedEntry(`${name} is back!`);
   });
 
   network.on("splat", ({ x, y }) => {
@@ -246,8 +348,15 @@ export function initGame(data, onGameOver) {
     onGameOver(result);
   });
 
-  // Game loop for sending input
+  // Render loop (runs at display refresh rate for smooth interpolation)
+  app.ticker.add(renderLoop);
   app.ticker.add(sendInput);
+}
+
+function renderLoop() {
+  if (!currState) return;
+  const interpolatedPlayers = getInterpolatedPlayers();
+  renderState({ players: interpolatedPlayers, snowballs: currState.snowballs });
 }
 
 function scaleCanvas() {
@@ -292,6 +401,17 @@ function onKeyUp(e) {
   }
 }
 
+function onVisibilityChange() {
+  if (document.hidden) {
+    tabHidden = true;
+    tabHiddenSince = Date.now();
+  } else {
+    tabHidden = false;
+    // Send heartbeat immediately on return
+    network.emit("heartbeat");
+  }
+}
+
 function sendInput() {
   if (isSpectating) return;
 
@@ -305,6 +425,19 @@ function sendInput() {
   if (keys["e"]) aimAngle += AIM_ROTATE_SPEED;
 
   if (mx !== 0 || my !== 0) playFootstep();
+
+  // Local prediction: apply movement immediately
+  if (mx !== 0 || my !== 0) {
+    hasPrediction = true;
+    const len = Math.sqrt(mx * mx + my * my);
+    const nmx = len > 1 ? mx / len : mx;
+    const nmy = len > 1 ? my / len : my;
+    predictedX += nmx * PLAYER_SPEED;
+    predictedY += nmy * PLAYER_SPEED;
+    // Basic bounds clamping
+    predictedX = Math.max(PLAYER_RADIUS, Math.min(ARENA_W / 2 - PLAYER_RADIUS, predictedX));
+    predictedY = Math.max(PLAYER_RADIUS, Math.min(ARENA_H - PLAYER_RADIUS, predictedY));
+  }
 
   const msg = {
     move: { x: mx, y: my },
@@ -332,8 +465,6 @@ function renderState(state) {
     }
   }
 
-  // Clear entity container — we re-add pooled objects each frame
-  // but we do NOT destroy them, just remove from display list
   entityContainer.removeChildren();
   uiContainer.removeChildren();
 
@@ -399,6 +530,20 @@ function renderState(state) {
     }
     drawCharacter(c, drawData);
 
+    // AFK indicator
+    if (p.afk) {
+      const afkText = new PIXI.Text("AFK", {
+        fontSize: 10,
+        fill: 0xff8800,
+        fontFamily: "Segoe UI, sans-serif",
+        fontWeight: "bold",
+      });
+      afkText.anchor.set(0.5);
+      afkText.y = -PLAYER_RADIUS - 46;
+      afkText.alpha = 0.5 + Math.sin(now / 300) * 0.5;
+      c.addChild(afkText);
+    }
+
     // Self-only visuals: packing snow during cooldown
     if (p.id === network.id) {
       const cooldownElapsed = now - lastThrowTime;
@@ -457,7 +602,6 @@ function renderState(state) {
   }
 
   // Draw snowballs (pooled)
-  // First deactivate all snowball pool entries
   for (const s of snowballPool) s.active = false;
 
   for (let i = 0; i < state.snowballs.length; i++) {
@@ -527,9 +671,12 @@ function updateTeamHUD(players) {
     div.innerHTML = `
       <h3>${teamNames[t]} (${alive}/${teamPlayers.length})</h3>
       <ul>
-        ${teamPlayers.map((p) =>
-          `<li class="${p.alive ? "" : "eliminated"}">${p.name}${p.id === network.id ? " (you)" : ""} - ${p.hp} HP</li>`
-        ).join("")}
+        ${teamPlayers.map((p) => {
+          const you = p.id === network.id ? " (you)" : "";
+          const afk = p.afk ? " [AFK]" : "";
+          const cls = p.alive ? (p.afk ? "afk" : "") : "eliminated";
+          return `<li class="${cls}">${p.name}${you}${afk} - ${p.hp} HP</li>`;
+        }).join("")}
       </ul>
     `;
     teamInfo.appendChild(div);
@@ -553,7 +700,6 @@ function updateCooldownBar() {
 }
 
 function addSplat(x, y) {
-  // Count active splats
   let activeCount = 0;
   let oldest = null;
   for (const s of splatPool) {
@@ -562,7 +708,6 @@ function addSplat(x, y) {
       if (!oldest || s.time < oldest.time) oldest = s;
     }
   }
-  // Recycle oldest if at limit
   if (activeCount >= MAX_SPLATS && oldest) {
     oldest.active = false;
   }
@@ -572,7 +717,6 @@ function addSplat(x, y) {
   entry.time = Date.now();
   entry.x = x;
   entry.y = y;
-  // Store random offsets once so they don't jitter
   entry.rx = Math.random() * 4;
   entry.ry = Math.random() * 3;
 }
@@ -587,7 +731,6 @@ function addFloatingText(x, y, text, color) {
 }
 
 function addFootprint(x, y) {
-  // Count active footprints
   let activeCount = 0;
   let oldest = null;
   for (const f of footprintPool) {
@@ -627,9 +770,14 @@ function flashScreen() {
 export function cleanup() {
   document.removeEventListener("keydown", onKeyDown);
   document.removeEventListener("keyup", onKeyUp);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
   window.removeEventListener("resize", scaleCanvas);
 
-  // Destroy all pooled objects properly
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+
   for (const [id] of playerContainers) {
     removePlayerContainer(id);
   }
@@ -656,6 +804,7 @@ export function cleanup() {
   floatingTextPool = [];
 
   if (app) {
+    app.ticker.remove(renderLoop);
     app.ticker.remove(sendInput);
     app.destroy(true, { children: true, texture: true, baseTexture: true });
     app = null;
@@ -663,7 +812,8 @@ export function cleanup() {
   document.getElementById("kill-feed").innerHTML = "";
   document.getElementById("team-info").innerHTML = "";
   Object.keys(keys).forEach((k) => delete keys[k]);
-  floatingTexts = [];
-  footprints = [];
+  prevState = null;
+  currState = null;
   prevPlayerPos = null;
+  hasPrediction = false;
 }

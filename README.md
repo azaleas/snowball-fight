@@ -25,6 +25,16 @@ bun --watch run server.js
 4. Hit enemies 5 times to eliminate them
 5. Last team standing wins
 
+## Features
+
+- **State interpolation** — 60fps smooth rendering between 20Hz server ticks
+- **Input prediction** — instant local movement with server reconciliation
+- **AFK detection** — 15s no input marks AFK, 25s total kicks from game
+- **Reconnection grace period** — 10s to rejoin with same name after disconnect
+- **Late join as spectator** — watch current game, auto-join next lobby
+- **Tab visibility handling** — pauses rendering when tab hidden, resumes cleanly
+- **Object pooling** — zero GPU texture leaks, stable memory over hours of play
+
 ## Tech Stack
 
 - **Runtime:** Bun with `@socket.io/bun-engine` (native WebSocket, ~50% less memory than Node polyfill)

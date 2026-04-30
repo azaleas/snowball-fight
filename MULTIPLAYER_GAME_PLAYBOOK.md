@@ -51,6 +51,97 @@ Client                          Server
 
 ---
 
+## Smoothness & Responsiveness
+
+### State Interpolation
+
+The server sends state at 20fps (50ms ticks) but browsers render at 60fps. Without interpolation, characters "teleport" between positions every 50ms. Fix: store previous and current server states, lerp between them based on elapsed time.
+
+```js
+let prevState = null;
+let currState = null;
+let stateTimestamp = 0;
+
+function onServerState(state) {
+  prevState = currState;
+  currState = state;
+  stateTimestamp = Date.now();
+}
+
+function getInterpolatedPosition(playerId) {
+  const t = Math.min((Date.now() - stateTimestamp) / TICK_MS, 1);
+  const prev = prevState?.players.find(p => p.id === playerId);
+  const curr = currState?.players.find(p => p.id === playerId);
+  if (!prev || !curr) return curr;
+  return { x: lerp(prev.x, curr.x, t), y: lerp(prev.y, curr.y, t) };
+}
+```
+
+### Input Prediction
+
+Your own character has ~50ms input lag (round trip to server). Apply movement locally, then reconcile with server state:
+
+```js
+// On input: apply locally
+predictedX += moveX * PLAYER_SPEED;
+predictedY += moveY * PLAYER_SPEED;
+
+// On server state: blend toward authoritative position
+const serverPos = state.players.find(p => p.id === myId);
+predictedX = lerp(predictedX, serverPos.x, 0.3);
+predictedY = lerp(predictedY, serverPos.y, 0.3);
+
+// If too far off (lag spike), snap
+if (Math.abs(predictedX - serverPos.x) > PLAYER_SPEED * 3) {
+  predictedX = serverPos.x;
+}
+```
+
+---
+
+## Resilience & Connection Handling
+
+### Tab Visibility
+
+When a browser tab goes background, `requestAnimationFrame` throttles to ~1fps and input stops. The player appears frozen to everyone else.
+
+- Detect via `document.visibilitychange` event
+- Send heartbeat immediately on tab return
+- Server-side: track `lastInput` timestamp per player
+- After 15s of no input: mark as AFK, stop their movement, broadcast to other players
+- After 25s total: eliminate and kick (prevents permanent frozen snowmen)
+
+### AFK Detection & Kick
+
+```
+0s        15s              25s
+|─ active ─|── AFK warn ──|── kicked ──|
+            broadcast       eliminate
+            "X is AFK"     "X kicked for AFK"
+```
+
+Players are notified via kill feed. If the player returns (sends any input), the AFK state clears and "X is back!" is broadcast.
+
+### Reconnection Grace Period
+
+If a player disconnects mid-game (WiFi blip, accidental close):
+1. Server holds their slot for 10 seconds (stop their movement, broadcast "disconnected")
+2. If they reconnect within 10s (same name), restore their full state (position, HP, team)
+3. If grace period expires, remove them and check win condition
+
+### Late Join as Spectator
+
+Players joining mid-game get "late-join" event instead of "error — game in progress":
+- They receive current game state (forts, teams) and watch as spectators
+- When the current game ends and lobby resets, they auto-join the next round
+- No need to refresh or re-enter name
+
+### Heartbeat
+
+Client sends a `heartbeat` event every 5 seconds regardless of input activity. This prevents the server from marking idle-but-watching players as AFK (e.g., someone reading the chat or waiting behind cover).
+
+---
+
 ## Game Flow Pattern
 
 Every game follows this three-screen pattern:

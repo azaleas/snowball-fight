@@ -526,6 +526,17 @@ The 3s max state interval spike is expected during game-over → lobby → resta
 - [ ] Tweak balance: movement speed, throw speed, cooldown, arena size, fort placement
 - [ ] Mobile considerations: if needed, add on-screen touch controls (stretch goal)
 
+### Phase 8: Smoothness & Resilience
+
+- [x] State interpolation — lerp between server snapshots for 60fps-smooth movement despite 20fps updates
+- [x] Input prediction — own player movement applied locally, reconciled with server state on each tick
+- [x] Tab visibility detection — sends heartbeat on return, prevents ghost frozen players
+- [x] AFK detection & kick — 15s no input = marked AFK, 10s more = eliminated and kicked
+- [x] Reconnection grace period — 10s window to reconnect (same name) without losing game state
+- [x] Late join as spectator — players joining mid-game watch current round, auto-join next lobby
+- [x] AFK/disconnect events broadcast to all players via kill feed
+- [x] Heartbeat system — client pings server every 5s to stay alive even when idle
+
 ### Phase 6: Performance Fix — Object Pooling & Memory Management
 
 - [x] Diagnosed crash after ~20 minutes: GPU texture leak from recreating PIXI objects every frame
