@@ -567,3 +567,13 @@ The 3s max state interval spike is expected during game-over → lobby → resta
 - [x] Added `moving` flag to server state broadcast
 - [x] Removed unused sprite assets and sprite loader module
 - [x] Updated PLAN.md documentation
+
+---
+
+## Future Ideas
+
+- [ ] **Destructible barriers** — forts take damage from snowball hits (3 hits to destroy), removing cover mid-game and forcing teams to adapt positioning
+- [ ] Power-ups (speed boost, rapid fire, shield)
+- [ ] Different snowball types (curve ball, split shot)
+- [ ] Shrinking arena over time (forces engagement)
+- [ ] Post-game stats screen (MVP, accuracy %, longest snipe)
