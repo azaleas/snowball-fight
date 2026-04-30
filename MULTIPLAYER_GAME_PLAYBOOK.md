@@ -572,6 +572,10 @@ game-name/
 
 17. **Tick timing**: Use `setInterval` for the game loop, not `requestAnimationFrame` on the server. The server tick must be independent of any rendering.
 
+18. **Screen transition listeners**: Don't register event listeners mid-flow (e.g., inside `showResults`). Chrome can fire events before listeners are attached. Use a single global handler that checks current screen state and forces the transition regardless of which screen the player is on.
+
+19. **Results screen personalization**: Always show win/loss relative to the player ("Victory!" vs "Defeat!"), not just which team won. Highlight the player's own name in stats with a visual cue (bold + color + "(you)"). Players will ask "was that me?" if you don't.
+
 ---
 
 ## Development Workflow

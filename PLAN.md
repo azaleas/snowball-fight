@@ -522,6 +522,12 @@ Rebuilding DOM (innerHTML) on every state tick (20fps) swallows click events —
 
 If a game HUD overlay uses `pointer-events: none` (so clicks pass through to the canvas), ALL children inherit this. Any interactive elements (buttons) need explicit `pointer-events: auto` on their container. This is a common gotcha with overlay UIs.
 
+### Screen Transitions & Event Listener Reliability
+
+Don't rely on event listeners registered mid-flow (e.g., registering a `lobby-update` handler inside `showResults`). Chrome's event loop timing can cause the event to fire before the listener is attached, or listeners can accumulate across rounds.
+
+**Fix**: Use a single global handler that checks the current screen state rather than registering/unregistering per-transition. If the client receives `lobby-update` with `phase: "lobby"` and is NOT on the lobby screen, force-return to lobby. This is robust regardless of which screen the player is on (game, results, spectating).
+
 ---
 
 ## Implementation Order
@@ -602,6 +608,13 @@ If a game HUD overlay uses `pointer-events: none` (so clicks pass through to the
 - [x] `updateHost()` checks spectators too — "alan" is always host even as spectator
 - [x] HUD only rebuilds on data change (prevents click-swallowing from 20fps DOM rebuilds)
 - [x] Fixed `pointer-events` on team roster (parent HUD uses `pointer-events: none` for canvas passthrough)
+
+### Phase 11: Results Screen & Play-Again Flow
+
+- [x] Win/loss indicator — "Victory!" (green) or "Defeat!" (red) shown based on player's team
+- [x] Player name highlighting in stats — blue background + bold + "(you)" suffix
+- [x] Fixed play-again flow — non-host players auto-rejoin lobby (was showing join form)
+- [x] Broadened lobby-update safety net — any screen (results or game) returns to lobby on phase change
 
 ### Phase 6: Performance Fix — Object Pooling & Memory Management
 

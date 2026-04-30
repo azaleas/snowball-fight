@@ -53,14 +53,16 @@ network.on("host-left", () => {
   showLobby(true);
 });
 
-// Safety net: if we receive lobby-update while in-game, host must have reset
+// Safety net: if we receive lobby-update while not in lobby, return to lobby
 network.on("lobby-update", ({ phase }) => {
-  if (phase === "lobby" && inGame) {
-    cleanup();
-    inGame = false;
-    showScreen("lobby");
-    showLobby(true);
-  }
+  if (phase !== "lobby") return;
+  const onLobby = screens.lobby.classList.contains("active");
+  if (onLobby) return;
+
+  if (inGame) cleanup();
+  inGame = false;
+  showScreen("lobby");
+  showLobby(true);
 });
 
 // Late join — player joined while game in progress, spectate until next round
@@ -83,14 +85,22 @@ function showResults(result) {
   inGame = false;
   showScreen("results");
 
-  winnerTitle.textContent = `${result.winningTeamName} Wins!`;
-  winnerTitle.style.color = result.winningTeam === 0 ? "#2563eb" : "#dc2626";
+  const iWon = myTeam === result.winningTeam;
+  winnerTitle.textContent = iWon
+    ? `Victory! ${result.winningTeamName} Wins!`
+    : `Defeat! ${result.winningTeamName} Wins`;
+  winnerTitle.style.color = iWon ? "#16a34a" : "#dc2626";
+
+  function statLine(id, text) {
+    const isMe = id === network.id;
+    return `<div class="stat-line${isMe ? " stat-me" : ""}">${text}${isMe ? " (you)" : ""}</div>`;
+  }
 
   let statsHTML = "";
 
   if (result.stats.firstBlood) {
-    const fbName = getPlayerName(result.stats.firstBlood);
-    statsHTML += `<h3>First Blood</h3><div class="stat-line">${fbName}</div>`;
+    statsHTML += `<h3>First Blood</h3>`;
+    statsHTML += statLine(result.stats.firstBlood, getPlayerName(result.stats.firstBlood));
   }
 
   statsHTML += "<h3>Eliminations</h3>";
@@ -98,7 +108,7 @@ function showResults(result) {
     .sort((a, b) => b[1] - a[1]);
   if (elims.length) {
     for (const [id, count] of elims) {
-      statsHTML += `<div class="stat-line">${getPlayerName(id)}: ${count} elimination${count !== 1 ? "s" : ""}</div>`;
+      statsHTML += statLine(id, `${getPlayerName(id)}: ${count} elimination${count !== 1 ? "s" : ""}`);
     }
   } else {
     statsHTML += `<div class="stat-line">No eliminations recorded</div>`;
@@ -109,7 +119,7 @@ function showResults(result) {
     .sort((a, b) => b[1] - a[1]);
   if (hits.length) {
     for (const [id, count] of hits) {
-      statsHTML += `<div class="stat-line">${getPlayerName(id)}: ${count} hit${count !== 1 ? "s" : ""}</div>`;
+      statsHTML += statLine(id, `${getPlayerName(id)}: ${count} hit${count !== 1 ? "s" : ""}`);
     }
   }
 
@@ -135,15 +145,17 @@ function handleLobbyFromResults({ players, hostId, phase }) {
   if (phase === "lobby") {
     network.socket.off("lobby-update", handleLobbyFromResults);
     showScreen("lobby");
-    showLobby();
+    showLobby(true);
+    return;
   }
   const isHost = network.id === hostId;
   playAgainBtn.classList.toggle("hidden", !isHost);
   resultsWaiting.classList.toggle("hidden", isHost);
 }
 
-// Track player names from game state for results
+// Track player names and team from game state for results
 let playerNames = {};
+let myTeam = null;
 network.on("state", (state) => {
   trackStateEvent();
   for (const p of state.players) {
@@ -153,6 +165,7 @@ network.on("state", (state) => {
 network.on("game-start", (data) => {
   for (const p of data.players) {
     playerNames[p.id] = p.name;
+    if (p.id === network.id) myTeam = p.team;
   }
 });
 

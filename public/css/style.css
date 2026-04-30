@@ -362,6 +362,15 @@ button:active {
   font-size: 0.95rem;
 }
 
+#results-stats .stat-line.stat-me {
+  font-weight: 700;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin: 2px -8px;
+}
+
 #play-again-btn {
   background: #2563eb;
   color: white;
