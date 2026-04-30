@@ -171,9 +171,10 @@ Every game follows this three-screen pattern:
 - Win condition checked after every relevant event
 
 ### Screen 3: Results
-- Winning team/player displayed
-- Stats: MVP, eliminations, first blood, etc.
-- Host can restart → everyone returns to lobby
+- Show "Victory!" or "Defeat!" personalized to each player's team
+- Highlight player's own name in stats (bold + color + "(you)" suffix)
+- Stats: eliminations, hits, first blood
+- Host can restart → everyone auto-returns to lobby (no re-join required)
 
 ### Host Priority
 For party settings, let a specific name always get host priority (e.g., the organizer):

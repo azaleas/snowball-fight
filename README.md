@@ -1,6 +1,6 @@
 # Snowball Fight
 
-Multiplayer browser party game — 4-11 players split into two teams, throw snowballs until one side is eliminated. No login, no auth, just enter a name and play.
+Multiplayer browser party game — 2-11 players split into two teams, throw snowballs until one side is eliminated. No login, no auth, just enter a name and play.
 
 **Live:** https://snowball-fight-production-25e4.up.railway.app/
 

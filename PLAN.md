@@ -4,7 +4,7 @@
 
 ## Overview
 
-A casual multiplayer snowball fight game for 4-11 players. No login, no auth — just enter a name and play. Players are split into two teams with funny auto-generated names, each player gets a random avatar, and teams battle until one side is fully eliminated.
+A casual multiplayer snowball fight game for 2-11 players. No login, no auth — just enter a name and play. Players are split into two teams with funny auto-generated names, each player gets a random avatar, and teams battle until one side is fully eliminated.
 
 The game aims to capture the **Snowcraft feel**: isometric 3/4 top-down view, clean white snow arena, chunky cartoon characters in team colors, snow fort cover, and direct-line snowball throws. The key difference — each player controls a single character in real-time multiplayer, rather than commanding a squad against AI.
 
