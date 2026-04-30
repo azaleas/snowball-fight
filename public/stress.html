@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stress Test Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "SF Mono", "Fira Code", monospace;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 24px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 18px; color: #60a5fa; margin-bottom: 20px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .card h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid #334155;
+    }
+    .metric:last-child { border-bottom: none; }
+    .metric-label { color: #94a3b8; font-size: 13px; }
+    .metric-value { font-size: 13px; font-weight: bold; }
+    .good { color: #4ade80; }
+    .warn { color: #fbbf24; }
+    .bad { color: #f87171; }
+    .chart-container {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .chart-container h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+    canvas { width: 100%; height: 120px; display: block; }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: pulse 2s infinite;
+    }
+    .status-dot.disconnected { background: #f87171; animation: none; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .history-table {
+      width: 100%;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .history-table td { padding: 2px 8px; }
+    .history-table td:first-child { color: #64748b; }
+  </style>
+</head>
+<body>
+  <h1>Snowball Fight - Stress Test Dashboard</h1>
+  <div class="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Connecting...</span>
+    <span style="margin-left: auto;" id="poll-rate">Polling: 1s</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Server</h2>
+      <div class="metric"><span class="metric-label">Uptime</span><span class="metric-value" id="uptime">-</span></div>
+      <div class="metric"><span class="metric-label">Phase</span><span class="metric-value" id="phase">-</span></div>
+      <div class="metric"><span class="metric-label">Players</span><span class="metric-value" id="players">-</span></div>
+      <div class="metric"><span class="metric-label">Snowballs</span><span class="metric-value" id="snowballs">-</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Tick Performance</h2>
+      <div class="metric"><span class="metric-label">Avg</span><span class="metric-value" id="tick-avg">-</span></div>
+      <div class="metric"><span class="metric-label">p95</span><span class="metric-value" id="tick-p95">-</span></div>
+      <div class="metric"><span class="metric-label">p99</span><span class="metric-value" id="tick-p99">-</span></div>
+      <div class="metric"><span class="metric-label">Max</span><span class="metric-value" id="tick-max">-</span></div>
+      <div class="metric"><span class="metric-label">Overruns</span><span class="metric-value" id="tick-overruns">-</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Memory</h2>
+      <div class="metric"><span class="metric-label">Heap Used</span><span class="metric-value" id="mem-heap">-</span></div>
+      <div class="metric"><span class="metric-label">Heap Total</span><span class="metric-value" id="mem-total">-</span></div>
+      <div class="metric"><span class="metric-label">RSS</span><span class="metric-value" id="mem-rss">-</span></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="chart-container">
+      <h2>Tick Time (ms) - last 60s</h2>
+      <canvas id="tick-chart" height="120"></canvas>
+    </div>
+    <div class="chart-container">
+      <h2>Heap Memory (MB) - last 60s</h2>
+      <canvas id="mem-chart" height="120"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const POLL_INTERVAL = 1000;
+    const HISTORY_SIZE = 60;
+
+    const tickHistory = [];
+    const memHistory = [];
+    let connected = false;
+
+    function $(id) { return document.getElementById(id); }
+
+    function colorForTick(ms) {
+      if (ms < 5) return "good";
+      if (ms < 40) return "warn";
+      return "bad";
+    }
+
+    function colorForMem(mb) {
+      if (mb < 50) return "good";
+      if (mb < 100) return "warn";
+      return "bad";
+    }
+
+    function formatUptime(s) {
+      if (s < 60) return `${s}s`;
+      if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+      return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+    }
+
+    function drawChart(canvasId, data, maxVal, thresholds) {
+      const canvas = $(canvasId);
+      const ctx = canvas.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+      const padding = { top: 4, bottom: 16, left: 0, right: 0 };
+      const chartW = w - padding.left - padding.right;
+      const chartH = h - padding.top - padding.bottom;
+
+      ctx.clearRect(0, 0, w, h);
+
+      if (data.length < 2) return;
+
+      // Threshold lines
+      if (thresholds) {
+        for (const t of thresholds) {
+          const y = padding.top + chartH - (t.value / maxVal) * chartH;
+          ctx.strokeStyle = t.color;
+          ctx.lineWidth = 0.5;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(padding.left, y);
+          ctx.lineTo(w - padding.right, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = t.color;
+          ctx.font = "10px monospace";
+          ctx.fillText(t.label, w - padding.right - 40, y - 3);
+        }
+      }
+
+      // Data line
+      ctx.strokeStyle = "#60a5fa";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i < data.length; i++) {
+        const x = padding.left + (i / (HISTORY_SIZE - 1)) * chartW;
+        const y = padding.top + chartH - (Math.min(data[i], maxVal) / maxVal) * chartH;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Fill under
+      ctx.lineTo(padding.left + ((data.length - 1) / (HISTORY_SIZE - 1)) * chartW, padding.top + chartH);
+      ctx.lineTo(padding.left, padding.top + chartH);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(96, 165, 250, 0.1)";
+      ctx.fill();
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch("/stats");
+        if (!res.ok) throw new Error("Not OK");
+        const d = await res.json();
+
+        if (!connected) {
+          connected = true;
+          $("status-dot").classList.remove("disconnected");
+          $("status-text").textContent = "Connected - polling /stats";
+        }
+
+        // Server
+        $("uptime").textContent = formatUptime(d.uptime);
+        $("phase").textContent = d.phase;
+        $("players").textContent = d.players;
+        $("snowballs").textContent = d.snowballs;
+
+        // Tick
+        $("tick-avg").textContent = `${d.tick.avgMs}ms`;
+        $("tick-avg").className = `metric-value ${colorForTick(d.tick.avgMs)}`;
+        $("tick-p95").textContent = `${d.tick.p95Ms}ms`;
+        $("tick-p95").className = `metric-value ${colorForTick(d.tick.p95Ms)}`;
+        $("tick-p99").textContent = `${d.tick.p99Ms}ms`;
+        $("tick-p99").className = `metric-value ${colorForTick(d.tick.p99Ms)}`;
+        $("tick-max").textContent = `${d.tick.maxMs}ms`;
+        $("tick-max").className = `metric-value ${colorForTick(d.tick.maxMs)}`;
+        $("tick-overruns").textContent = `${d.tick.overruns} / ${d.tick.total}`;
+        $("tick-overruns").className = `metric-value ${d.tick.overruns > 0 ? "warn" : "good"}`;
+
+        // Memory
+        $("mem-heap").textContent = `${d.memory.heapUsedMB} MB`;
+        $("mem-heap").className = `metric-value ${colorForMem(d.memory.heapUsedMB)}`;
+        $("mem-total").textContent = `${d.memory.heapTotalMB} MB`;
+        $("mem-rss").textContent = `${d.memory.rssMB} MB`;
+        $("mem-rss").className = `metric-value ${colorForMem(d.memory.rssMB)}`;
+
+        // History
+        tickHistory.push(d.tick.p95Ms);
+        if (tickHistory.length > HISTORY_SIZE) tickHistory.shift();
+        memHistory.push(d.memory.heapUsedMB);
+        if (memHistory.length > HISTORY_SIZE) memHistory.shift();
+
+        // Charts
+        drawChart("tick-chart", tickHistory, 50, [
+          { value: 40, color: "#fbbf24", label: "40ms" },
+          { value: 50, color: "#f87171", label: "budget" },
+        ]);
+        drawChart("mem-chart", memHistory, Math.max(20, ...memHistory) * 1.3, [
+          { value: 100, color: "#f87171", label: "100MB" },
+        ]);
+
+      } catch (e) {
+        if (connected) {
+          connected = false;
+          $("status-dot").classList.add("disconnected");
+          $("status-text").textContent = "Disconnected - retrying...";
+        }
+      }
+    }
+
+    poll();
+    setInterval(poll, POLL_INTERVAL);
+  </script>
+</body>
+</html>
