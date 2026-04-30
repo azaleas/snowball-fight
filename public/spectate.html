@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spectate - Snowball Fight</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body { margin: 0; overflow: hidden; background: #0f172a; }
+    #spectate-hud {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: rgba(15, 23, 42, 0.85);
+      color: #e2e8f0;
+      font: 12px "SF Mono", monospace;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    #spectate-hud .teams { display: flex; gap: 24px; }
+    #spectate-hud .team { display: flex; align-items: center; gap: 6px; }
+    #spectate-hud .team-dot { width: 10px; height: 10px; border-radius: 50%; }
+    #spectate-hud .team-0 .team-dot { background: #3b82f6; }
+    #spectate-hud .team-1 .team-dot { background: #ef4444; }
+    #spectate-hud .phase-badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #334155;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 1px;
+    }
+    #spectate-hud .phase-badge.playing { background: #166534; color: #4ade80; }
+    #spectate-hud .phase-badge.lobby { background: #1e3a5f; color: #60a5fa; }
+    #spectate-hud .phase-badge.results { background: #7c2d12; color: #fb923c; }
+    #canvas-wrap {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #waiting {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font: 16px "SF Mono", monospace;
+      z-index: 50;
+    }
+    #kill-feed {
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      font: 11px "SF Mono", monospace;
+      color: #94a3b8;
+      z-index: 100;
+      max-width: 280px;
+    }
+    .kill-entry {
+      padding: 3px 8px;
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 4px;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="spectate-hud">
+    <div class="teams">
+      <div class="team team-0"><div class="team-dot"></div><span id="team0-name">-</span> (<span id="team0-alive">0</span>)</div>
+      <div class="team team-1"><div class="team-dot"></div><span id="team1-name">-</span> (<span id="team1-alive">0</span>)</div>
+    </div>
+    <div class="phase-badge" id="phase-badge">connecting</div>
+  </div>
+  <div id="waiting">Waiting for game to start...</div>
+  <div id="canvas-wrap"></div>
+  <div id="kill-feed"></div>
+
+  <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+  <script type="module">
+    import { drawCharacter, drawEliminated, drawFort, drawHPBar, drawGround } from "/js/renderer.js";
+
+    const ARENA_W = 1600;
+    const ARENA_H = 1000;
+    const PLAYER_RADIUS = 20;
+    const SNOWBALL_ARC_HEIGHT = 40;
+
+    const socket = io({ transports: ["websocket"] });
+    let app = null;
+    let groundContainer, fortContainer, entityContainer;
+    let teamNames = ["Team 0", "Team 1"];
+    let forts = [];
+    let playerContainers = new Map();
+    let phase = "connecting";
+
+    socket.on("connect", () => {
+      socket.emit("spectate");
+      updatePhase("lobby");
+    });
+
+    socket.on("spectate-info", (data) => {
+      forts = data.forts;
+      teamNames = data.teamNames || ["Team 0", "Team 1"];
+      phase = data.phase;
+      updatePhase(data.phase);
+
+      if (data.phase === "playing" && !app) {
+        initCanvas();
+      }
+    });
+
+    socket.on("game-start", (data) => {
+      forts = data.forts;
+      teamNames = data.teamNames;
+      updatePhase("playing");
+      if (app) destroyCanvas();
+      initCanvas();
+    });
+
+    socket.on("state", (state) => {
+      if (!app) {
+        initCanvas();
+      }
+      renderState(state);
+      updateHUD(state.players);
+    });
+
+    socket.on("hit", ({ targetId, attackerId, hpLeft, friendlyFire }) => {
+      // Kill feed handled via state
+    });
+
+    socket.on("elimination", ({ playerId, killerId, friendlyFire }) => {
+      const killerName = getPlayerName(killerId);
+      const deadName = getPlayerName(playerId);
+      if (friendlyFire) {
+        addKillFeed(`${killerName} TK'd ${deadName}`);
+      } else {
+        addKillFeed(`${killerName} eliminated ${deadName}`);
+      }
+    });
+
+    socket.on("game-over", ({ winningTeamName }) => {
+      updatePhase("results");
+      addKillFeed(`${winningTeamName} wins!`);
+    });
+
+    socket.on("host-left", () => {
+      updatePhase("lobby");
+      destroyCanvas();
+    });
+
+    let playerNames = {};
+    function getPlayerName(id) { return playerNames[id] || "???"; }
+
+    function updatePhase(p) {
+      phase = p;
+      const badge = document.getElementById("phase-badge");
+      badge.textContent = p;
+      badge.className = `phase-badge ${p}`;
+      document.getElementById("waiting").style.display = p === "playing" ? "none" : "flex";
+    }
+
+    function updateHUD(players) {
+      for (const p of players) playerNames[p.id] = p.name;
+
+      const t0 = players.filter(p => p.team === 0);
+      const t1 = players.filter(p => p.team === 1);
+      document.getElementById("team0-name").textContent = teamNames[0] || "Team 0";
+      document.getElementById("team1-name").textContent = teamNames[1] || "Team 1";
+      document.getElementById("team0-alive").textContent = `${t0.filter(p => p.alive).length}/${t0.length}`;
+      document.getElementById("team1-alive").textContent = `${t1.filter(p => p.alive).length}/${t1.length}`;
+    }
+
+    function initCanvas() {
+      const wrap = document.getElementById("canvas-wrap");
+      wrap.innerHTML = "";
+
+      app = new PIXI.Application({
+        width: ARENA_W,
+        height: ARENA_H,
+        backgroundColor: 0xcce5ff,
+        antialias: true,
+        resolution: Math.min(window.devicePixelRatio || 1, 2),
+        autoDensity: true,
+      });
+      wrap.appendChild(app.view);
+      scaleCanvas();
+      window.addEventListener("resize", scaleCanvas);
+
+      groundContainer = new PIXI.Container();
+      fortContainer = new PIXI.Container();
+      entityContainer = new PIXI.Container();
+      entityContainer.sortableChildren = true;
+
+      app.stage.addChild(groundContainer, fortContainer, entityContainer);
+
+      drawGround(groundContainer, ARENA_W, ARENA_H);
+      for (const fort of forts) {
+        drawFort(fortContainer, fort);
+      }
+    }
+
+    function destroyCanvas() {
+      window.removeEventListener("resize", scaleCanvas);
+      playerContainers.clear();
+      if (app) {
+        app.destroy(true, { children: true, texture: true, baseTexture: true });
+        app = null;
+      }
+    }
+
+    function scaleCanvas() {
+      if (!app) return;
+      const wrap = document.getElementById("canvas-wrap");
+      const scaleX = wrap.clientWidth / ARENA_W;
+      const scaleY = (wrap.clientHeight - 40) / ARENA_H;
+      const scale = Math.min(scaleX, scaleY, 1.5);
+      app.view.style.width = `${ARENA_W * scale}px`;
+      app.view.style.height = `${ARENA_H * scale}px`;
+    }
+
+    function getOrCreatePlayerContainer(p) {
+      if (playerContainers.has(p.id)) return playerContainers.get(p.id);
+      const container = new PIXI.Container();
+      const nameText = new PIXI.Text(p.name, {
+        fontSize: 11, fill: 0x333333,
+        fontFamily: "Segoe UI, sans-serif", fontWeight: "bold",
+      });
+      nameText.anchor.set(0.5, 1);
+      nameText.y = -PLAYER_RADIUS - 34;
+      const entry = { container, nameText };
+      playerContainers.set(p.id, entry);
+      return entry;
+    }
+
+    function renderState(state) {
+      if (!app) return;
+      entityContainer.removeChildren();
+
+      // Remove stale containers
+      const activeIds = new Set(state.players.map(p => p.id));
+      for (const [id] of playerContainers) {
+        if (!activeIds.has(id)) playerContainers.delete(id);
+      }
+
+      // Eliminated
+      for (const p of state.players) {
+        if (p.alive) continue;
+        const entry = getOrCreatePlayerContainer(p);
+        const c = entry.container;
+        c.removeChildren();
+        c.x = p.x; c.y = p.y; c.zIndex = p.y - 1;
+        drawEliminated(c, p);
+        entityContainer.addChild(c);
+      }
+
+      // Alive
+      for (const p of state.players) {
+        if (!p.alive) continue;
+        const entry = getOrCreatePlayerContainer(p);
+        const c = entry.container;
+        c.removeChildren();
+        c.x = p.x; c.y = p.y; c.zIndex = p.y;
+        drawCharacter(c, p);
+        drawHPBar(c, p.hp, p.maxHp);
+        const nt = entry.nameText;
+        if (nt.text !== p.name) nt.text = p.name;
+        nt.y = -PLAYER_RADIUS - 34;
+        c.addChild(nt);
+        entityContainer.addChild(c);
+      }
+
+      // Snowballs
+      for (const s of state.snowballs) {
+        const p = s.progress || 0;
+        const arcHeight = Math.sin(p * Math.PI) * SNOWBALL_ARC_HEIGHT;
+        const scale = 1 + Math.sin(p * Math.PI) * 0.3;
+        const g = new PIXI.Graphics();
+        g.zIndex = s.y + 1000;
+        const shadowScale = 1 + arcHeight / 30;
+        g.beginFill(0x000000, 0.1);
+        g.drawEllipse(0, arcHeight, 5 * shadowScale, 2.5 * shadowScale);
+        g.endFill();
+        g.beginFill(0xffffff);
+        g.drawCircle(0, -arcHeight, 8 * scale);
+        g.endFill();
+        g.lineStyle(1, 0xdddddd);
+        g.drawCircle(0, -arcHeight, 8 * scale);
+        g.lineStyle(0);
+        g.x = s.x; g.y = s.y;
+        entityContainer.addChild(g);
+      }
+    }
+
+    function addKillFeed(text) {
+      const feed = document.getElementById("kill-feed");
+      const entry = document.createElement("div");
+      entry.className = "kill-entry";
+      entry.textContent = text;
+      feed.prepend(entry);
+      while (feed.children.length > 10) feed.removeChild(feed.lastChild);
+      setTimeout(() => { if (entry.parentNode) entry.remove(); }, 8000);
+    }
+  </script>
+</body>
+</html>

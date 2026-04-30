@@ -485,6 +485,24 @@ io.on("connection", (socket) => {
     broadcastLobby();
   });
 
+  socket.on("spectate", () => {
+    socket.join("spectators");
+    const playerStates = [];
+    for (const [id, p] of players) {
+      playerStates.push({
+        id, name: p.name, team: p.team, x: p.x, y: p.y,
+        hp: p.hp, maxHp: MAX_HP, alive: p.alive, hat: p.hat,
+        aimAngle: p.aimAngle,
+      });
+    }
+    socket.emit("spectate-info", {
+      phase,
+      players: playerStates,
+      teamNames,
+      forts: activeForts.map(f => ({ x: f.x, y: f.y, w: FORT_W, h: FORT_H })),
+    });
+  });
+
   socket.on("ping-measure", (cb) => {
     if (typeof cb === "function") cb(Date.now());
   });
