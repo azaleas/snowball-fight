@@ -325,6 +325,26 @@ A script that spawns N fake players via Socket.IO. Each bot:
 - Reacts to hits (dodge) and eliminations (stop inputs)
 - Host auto-restarts after game over
 
+### Bot Behavior Tips
+
+- Bots must aim at enemies, not random directions — random aim means snowballs fly into walls and games never finish
+- Track nearest enemy from state broadcasts, smoothly interpolate aim angle toward target (with slight jitter for realism)
+- Higher throw rate (~15% per tick) with good power (0.5-1.0) ensures games complete in reasonable time
+- Movement should be tactical: strafe up/down, advance toward center, retreat when hit
+- Without smart aiming, 8 bots can play for 60s+ without a single elimination
+
+### Browser Spectator View
+
+Add a `/spectate.html` page that connects via Socket.IO but never joins as a player — just receives `state`, `elimination`, and `game-over` events. This lets you visually watch bot games without interfering. Server-side, add a `spectate` event that sends current game state to the spectator on connect.
+
+### Live Metrics Dashboard
+
+Add a `/stress.html` page that polls `/stats` every second and renders:
+- Tick timing cards (color-coded green/yellow/red)
+- Rolling 60s charts for tick p95 and heap memory
+- Threshold lines at budget limits
+- Connection status indicator
+
 ### What to Measure
 
 **Server-side (via `/stats` endpoint):**
@@ -391,10 +411,12 @@ AUTO_START=false BOTS=6 bun run stress-test.js
 game-name/
 ├── server.js              # Bun HTTP + Socket.IO, game loop, all server logic
 ├── stress-test.js         # Bot stress test (dev only)
-├── package.json           # Minimal deps: socket.io, socket.io-client
+├── package.json           # Minimal deps: socket.io, @socket.io/bun-engine, socket.io-client
 ├── .gitignore             # node_modules/, .DS_Store, *.log, .env, .claude/
 ├── public/
 │   ├── index.html         # Single HTML file, loads PixiJS from CDN
+│   ├── spectate.html      # Spectator view (watch games without joining)
+│   ├── stress.html        # Live metrics dashboard
 │   ├── css/
 │   │   └── style.css      # Lobby, HUD, results styling
 │   ├── sounds/            # Kenney CC0 audio files (.ogg)

@@ -25,7 +25,9 @@ class Bot {
     this.isHost = isHost;
     this.socket = io(SERVER, { transports: ["websocket"] });
     this.alive = true;
-    this.aimAngle = Math.random() * Math.PI * 2;
+    this.team = 0;
+    this.aimAngle = 0;
+    this.targetAngle = 0;
     this.moveDir = { x: 0, y: 0 };
     this.inputInterval = null;
     this.behaviorInterval = null;
@@ -52,11 +54,13 @@ class Bot {
       }
     });
 
-    this.socket.on("game-start", () => {
+    this.socket.on("game-start", (data) => {
+      const me = data.players.find(p => p.id === this.socket.id);
+      this.team = me ? me.team : 0;
       this.startBehavior();
     });
 
-    this.socket.on("state", () => {
+    this.socket.on("state", (state) => {
       this.stateEventsReceived++;
       const now = Date.now();
       if (this.lastStateTime > 0) {
@@ -64,6 +68,24 @@ class Bot {
         if (this.stateIntervals.length > 200) this.stateIntervals.shift();
       }
       this.lastStateTime = now;
+
+      // Track enemies for aiming
+      if (state.players) {
+        const me = state.players.find(p => p.id === this.socket.id);
+        const enemies = state.players.filter(p => p.team !== this.team && p.alive);
+        if (me && enemies.length > 0) {
+          // Aim at nearest enemy
+          let nearest = enemies[0];
+          let nearestDist = Infinity;
+          for (const e of enemies) {
+            const dx = e.x - me.x;
+            const dy = e.y - me.y;
+            const d = dx * dx + dy * dy;
+            if (d < nearestDist) { nearestDist = d; nearest = e; }
+          }
+          this.targetAngle = Math.atan2(nearest.y - me.y, nearest.x - me.x);
+        }
+      }
     });
 
     this.socket.on("hit", ({ targetId }) => {
@@ -104,12 +126,17 @@ class Bot {
     this.alive = true;
     this.inputInterval = setInterval(() => {
       if (!this.alive) return;
-      const throwing = Math.random() < 0.08;
+      // Smoothly track toward target angle with slight jitter
+      const angleDiff = this.targetAngle - this.aimAngle;
+      const wrapped = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+      this.aimAngle += wrapped * 0.15 + randomBetween(-0.05, 0.05);
+
+      const throwing = Math.random() < 0.15;
       this.socket.emit("input", {
         move: this.moveDir,
         aimAngle: this.aimAngle,
         throwing,
-        power: throwing ? randomBetween(0.3, 1.0) : 0,
+        power: throwing ? randomBetween(0.5, 1.0) : 0,
       });
     }, 50);
 
@@ -123,16 +150,22 @@ class Bot {
 
   changeBehavior() {
     const action = Math.random();
-    if (action < 0.3) {
-      this.moveDir = { x: Math.random() < 0.5 ? -1 : 1, y: 0 };
-    } else if (action < 0.6) {
+    if (action < 0.35) {
+      // Strafe up/down
       this.moveDir = { x: 0, y: Math.random() < 0.5 ? -1 : 1 };
-    } else if (action < 0.8) {
-      this.moveDir = { x: Math.random() < 0.5 ? -1 : 1, y: Math.random() < 0.5 ? -1 : 1 };
+    } else if (action < 0.55) {
+      // Advance toward center line
+      this.moveDir = { x: this.team === 0 ? 1 : -1, y: 0 };
+    } else if (action < 0.7) {
+      // Diagonal strafe
+      this.moveDir = { x: this.team === 0 ? 1 : -1, y: Math.random() < 0.5 ? -1 : 1 };
+    } else if (action < 0.85) {
+      // Retreat
+      this.moveDir = { x: this.team === 0 ? -1 : 1, y: 0 };
     } else {
+      // Stop and aim
       this.moveDir = { x: 0, y: 0 };
     }
-    this.aimAngle += randomBetween(-1, 1);
   }
 
   changeDirection() {

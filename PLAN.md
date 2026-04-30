@@ -19,7 +19,7 @@ The game aims to capture the **Snowcraft feel**: isometric 3/4 top-down view, cl
 | Frontend Logic | Vanilla JS | No framework needed — lobby is simple DOM, game is all PixiJS canvas |
 | Real-time | Socket.IO | Proven WebSocket lib, auto-reconnect, rooms |
 | Assets | Hand-drawn (canvas/PixiJS Graphics) + Kenney UI Pack + freesound.org | No external sprite deps for core game |
-| Hosting | Fly.io free tier | Always-on VMs, native WebSocket support, direct CLI deploy (no GitHub needed) |
+| Hosting | Railway (serverless mode) | $5 free credits, auto-sleep when idle, WebSocket support, no credit card |
 
 No build step. No bundler. PixiJS loaded from CDN, everything else is plain JS served as static files.
 
@@ -455,6 +455,28 @@ After ~20 minutes of real multiplayer play, multiple players experienced blank s
 **Fix**: Object pooling. Player containers, splats, snowballs, footprints, and floating text are now allocated once and reused via active/inactive flags. PIXI.Text objects are cached per-player. Resolution is capped at 2x. All objects are properly `.destroy()`ed with texture cleanup on game end.
 
 **Key rule**: In a PixiJS game loop, never `new` display objects inside the render function. Allocate at init, reuse via pools, destroy only on cleanup.
+
+### Bun-Native Engine Migration
+
+Replaced Node.js `createServer` polyfill with `@socket.io/bun-engine`, which uses Bun's native HTTP/WebSocket server. Results:
+
+- **Memory**: 3.5MB heap vs 6.7MB — ~50% reduction
+- **Setup**: `export default { port, idleTimeout: 30, fetch, websocket }` pattern instead of `httpServer.listen()`
+- **Critical**: `idleTimeout` must exceed Socket.IO's `pingInterval` (25s default) or connections silently drop
+- **Static files**: Served via the `fetch` handler using Bun's `Response` API instead of Node's `res.writeHead()`/`res.end()`
+- **Gotcha**: Always check `statSync(path).isDirectory()` before `readFileSync()` — Socket.IO can hit directory paths causing EISDIR crash
+
+### Stress Testing Findings
+
+Bot stress test (8 bots, 60s) with `@socket.io/bun-engine`:
+- Tick avg: 0.57ms (budget: 50ms) — 1.1% utilization
+- p95: 1.32ms, max: 8.51ms, zero overruns
+- Memory stable at ~5MB heap, no leaks detected
+- RTT: 1ms avg, 2ms p95
+- State intervals: 51ms avg (target: 50ms)
+- 8 games completed in 45s with realistic bot behavior
+
+The 3s max state interval spike is expected during game-over → lobby → restart transitions (no state events broadcast during that gap).
 
 ---
 
