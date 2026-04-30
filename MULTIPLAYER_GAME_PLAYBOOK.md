@@ -564,7 +564,13 @@ game-name/
 
 13. **Lobby-update safety net**: If a client receives a `lobby-update` with `phase === "lobby"` while it thinks it's in-game, force-return to lobby. This catches race conditions where `host-left` was missed.
 
-10. **Tick timing**: Use `setInterval` for the game loop, not `requestAnimationFrame` on the server. The server tick must be independent of any rendering.
+14. **DOM HUD rebuild rate**: Don't rebuild DOM (innerHTML) on every state tick (20fps). Clicks get swallowed because the button is destroyed before the handler fires. Only rebuild when data actually changes (compare a key string).
+
+15. **pointer-events inheritance**: If your game HUD overlay uses `pointer-events: none` (so clicks pass to canvas), all children inherit it. Add `pointer-events: auto` to any interactive child containers (buttons, kick icons).
+
+16. **Host kick feature**: Always include a way for the host to manually kick players. Essential for dealing with trolls, AFK bots that slip through, or stuck connections. Server-side: verify the kicker is the host, force-disconnect the target socket.
+
+17. **Tick timing**: Use `setInterval` for the game loop, not `requestAnimationFrame` on the server. The server tick must be independent of any rendering.
 
 ---
 

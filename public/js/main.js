@@ -36,6 +36,15 @@ initLobby((data) => {
   initGame(data, showResults);
 });
 
+// Kicked by host
+network.on("kicked", () => {
+  if (inGame) cleanup();
+  inGame = false;
+  showScreen("lobby");
+  showLobby();
+  alert("You were kicked by the host.");
+});
+
 // Host left during game — return everyone to lobby and auto-rejoin
 network.on("host-left", () => {
   if (inGame) cleanup();

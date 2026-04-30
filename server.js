@@ -359,7 +359,7 @@ function tick() {
     team: s.team, progress: Math.round(s.progress * 100) / 100,
   }));
 
-  io.emit("state", { players: playerStates, snowballs: snowballStates });
+  io.emit("state", { players: playerStates, snowballs: snowballStates, hostId });
 }
 
 function checkWinCondition() {
@@ -384,15 +384,23 @@ function checkWinCondition() {
 }
 
 function updateHost() {
-  if (players.size === 0) {
-    hostId = null;
-    return;
-  }
+  // Check active players first
   for (const [id, p] of players) {
     if (p.name.toLowerCase() === "alan") {
       hostId = id;
       return;
     }
+  }
+  // Check spectators/late-joiners
+  for (const [, s] of io.sockets.sockets) {
+    if (s.data && s.data.name && s.data.name.toLowerCase() === "alan") {
+      hostId = s.id;
+      return;
+    }
+  }
+  if (players.size === 0) {
+    hostId = null;
+    return;
   }
   if (!players.has(hostId)) {
     hostId = players.keys().next().value;
@@ -427,6 +435,7 @@ io.on("connection", (socket) => {
         forts: activeForts.map(f => ({ x: f.x, y: f.y, w: FORT_W, h: FORT_H })),
       });
       socket.data = { name, waitingForLobby: true };
+      updateHost();
       console.log(`${name} joined as spectator (game in progress)`);
       return;
     }
@@ -492,8 +501,37 @@ io.on("connection", (socket) => {
     io.emit("game-start", {
       players: playerStates,
       teamNames,
+      hostId,
       forts: activeForts.map(f => ({ x: f.x, y: f.y, w: FORT_W, h: FORT_H })),
     });
+  });
+
+  socket.on("kick-player", ({ targetId }) => {
+    if (socket.id !== hostId) return;
+    if (targetId === hostId) return;
+    const target = players.get(targetId);
+    if (!target) return;
+
+    if (phase === "playing" && target.alive) {
+      target.alive = false;
+      io.emit("elimination", { playerId: targetId, killerId: null, afkKick: true });
+    }
+
+    players.delete(targetId);
+    // Disconnect the kicked player's socket
+    const targetSocket = io.sockets.sockets.get(targetId);
+    if (targetSocket) {
+      targetSocket.emit("kicked");
+      targetSocket.disconnect(true);
+    }
+
+    console.log(`${target.name} was kicked by host`);
+    if (phase === "lobby") {
+      updateHost();
+      broadcastLobby();
+    } else if (phase === "playing") {
+      checkWinCondition();
+    }
   });
 
   socket.on("heartbeat", () => {

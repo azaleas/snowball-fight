@@ -132,6 +132,24 @@ button:active {
   font-weight: 600;
 }
 
+.kick-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 0.85rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin-left: 8px;
+  padding: 0 4px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+  pointer-events: auto;
+}
+.kick-btn:hover {
+  opacity: 1;
+}
+
+
 #player-count {
   color: #6b7280;
   font-size: 0.9rem;
@@ -209,6 +227,7 @@ button:active {
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 0.85rem;
+  pointer-events: auto;
   min-width: 160px;
 }
 

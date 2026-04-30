@@ -31,6 +31,7 @@ bun --watch run server.js
 - **AFK detection** — 15s no input marks AFK, 25s total kicks from game
 - **Disconnect = elimination** — instant elimination, rejoin as spectator next round
 - **Late join as spectator** — watch current game, auto-join next lobby
+- **Host kick** — host can manually remove players from lobby or mid-game
 - **Host disconnect recovery** — all players auto-return to lobby and rejoin
 - **Tab visibility handling** — pauses rendering when tab hidden, resumes cleanly
 - **Object pooling** — zero GPU texture leaks, stable memory over hours of play

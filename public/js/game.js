@@ -16,6 +16,7 @@ let teamNames = [];
 let myTeam = null;
 let lastThrowTime = 0;
 let isSpectating = false;
+let isHost = false;
 
 // Input state
 const keys = {};
@@ -38,6 +39,7 @@ let prevPlayerPos = null;
 
 // Player tracking for HUD
 let currentPlayers = [];
+let lastHudKey = "";
 
 // --- State interpolation ---
 let prevState = null;
@@ -205,8 +207,10 @@ export function initGame(data, onGameOver) {
   aimAngle = me ? me.aimAngle : 0;
   lastThrowTime = 0;
   isSpectating = !!data.lateJoin;
+  isHost = data.hostId === network.id;
   prevState = null;
   currState = null;
+  lastHudKey = "";
 
   if (isSpectating) {
     document.getElementById("spectator-banner").classList.remove("hidden");
@@ -258,7 +262,14 @@ export function initGame(data, onGameOver) {
     stateTimestamp = Date.now();
 
     currentPlayers = state.players;
-    updateTeamHUD(state.players);
+    if (state.hostId) isHost = state.hostId === network.id;
+
+    // Only rebuild HUD when relevant data changes
+    const hudKey = state.players.map(p => `${p.id}:${p.hp}:${p.alive}:${p.afk}`).join(",") + `:host:${isHost}`;
+    if (hudKey !== lastHudKey) {
+      lastHudKey = hudKey;
+      updateTeamHUD(state.players);
+    }
     updateCooldownBar();
   });
 
@@ -647,17 +658,29 @@ function updateTeamHUD(players) {
     div.className = `team-roster team-${t}`;
     const teamPlayers = players.filter((p) => p.team === t);
     const alive = teamPlayers.filter((p) => p.alive).length;
-    div.innerHTML = `
-      <h3>${teamNames[t]} (${alive}/${teamPlayers.length})</h3>
-      <ul>
-        ${teamPlayers.map((p) => {
-          const you = p.id === network.id ? " (you)" : "";
-          const afk = p.afk ? " [AFK]" : "";
-          const cls = p.alive ? (p.afk ? "afk" : "") : "eliminated";
-          return `<li class="${cls}">${p.name}${you}${afk} - ${p.hp} HP</li>`;
-        }).join("")}
-      </ul>
-    `;
+    const heading = document.createElement("h3");
+    heading.textContent = `${teamNames[t]} (${alive}/${teamPlayers.length})`;
+    div.appendChild(heading);
+
+    const ul = document.createElement("ul");
+    for (const p of teamPlayers) {
+      const li = document.createElement("li");
+      const you = p.id === network.id ? " (you)" : "";
+      const afk = p.afk ? " [AFK]" : "";
+      li.className = p.alive ? (p.afk ? "afk" : "") : "eliminated";
+      li.textContent = `${p.name}${you}${afk} - ${p.hp} HP`;
+
+      if (isHost && p.id !== network.id && p.alive) {
+        const kickBtn = document.createElement("button");
+        kickBtn.textContent = "✕";
+        kickBtn.className = "kick-btn";
+        kickBtn.title = `Kick ${p.name}`;
+        kickBtn.onclick = () => network.emit("kick-player", { targetId: p.id });
+        li.appendChild(kickBtn);
+      }
+      ul.appendChild(li);
+    }
+    div.appendChild(ul);
     teamInfo.appendChild(div);
   }
 }

@@ -514,6 +514,14 @@ When removing players from the render loop mid-game, **never `.destroy()` a cont
 
 Sending input every frame (60fps) causes diagonal movement jitter — keys register on different frames, so the server briefly sees (1,0) before (1,1). Throttle input sends to 30fps (still well above the 20Hz tick rate). Throws bypass the throttle for instant response.
 
+### DOM HUD in a 20fps Game Loop
+
+Rebuilding DOM (innerHTML) on every state tick (20fps) swallows click events — buttons get destroyed before the click handler fires. Fix: only rebuild the HUD when underlying data changes (use a key string comparison). This also reduces layout thrashing.
+
+### pointer-events Inheritance
+
+If a game HUD overlay uses `pointer-events: none` (so clicks pass through to the canvas), ALL children inherit this. Any interactive elements (buttons) need explicit `pointer-events: auto` on their container. This is a common gotcha with overlay UIs.
+
 ---
 
 ## Implementation Order
@@ -583,6 +591,17 @@ Sending input every frame (60fps) causes diagonal movement jitter — keys regis
 - [x] Fixed PixiJS ticker crash on player leave — detach containers instead of destroying mid-render
 - [x] Added lobby-update safety net — clients force-return to lobby if they receive it while in-game
 - [x] Throttled input sends to 30fps — fixes diagonal movement jitter from per-frame key sampling
+
+### Phase 10: Host Kick Feature
+
+- [x] Server-side `kick-player` event (host-only, prevents self-kick)
+- [x] Kick button in lobby (red "✕" next to each non-host player)
+- [x] Kick button in-game HUD (next to alive players in team roster)
+- [x] Kicked player's socket is forcefully disconnected, receives alert
+- [x] `hostId` included in state broadcast — enables host UI for spectators/late-joiners
+- [x] `updateHost()` checks spectators too — "alan" is always host even as spectator
+- [x] HUD only rebuilds on data change (prevents click-swallowing from 20fps DOM rebuilds)
+- [x] Fixed `pointer-events` on team roster (parent HUD uses `pointer-events: none` for canvas passthrough)
 
 ### Phase 6: Performance Fix — Object Pooling & Memory Management
 

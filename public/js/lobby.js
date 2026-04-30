@@ -41,16 +41,24 @@ export function initLobby(onGameStart) {
     if (phase !== "lobby") return;
 
     playerList.innerHTML = "";
+    const isHost = network.id === hostId;
     players.forEach((p) => {
       const li = document.createElement("li");
       li.textContent = p.name;
       if (p.id === hostId) li.classList.add("host");
+      if (isHost && p.id !== hostId) {
+        const kickBtn = document.createElement("button");
+        kickBtn.textContent = "✕";
+        kickBtn.className = "kick-btn";
+        kickBtn.title = `Kick ${p.name}`;
+        kickBtn.onclick = () => network.emit("kick-player", { targetId: p.id });
+        li.appendChild(kickBtn);
+      }
       playerList.appendChild(li);
     });
 
     playerCount.textContent = `${players.length} player${players.length !== 1 ? "s" : ""} in lobby`;
 
-    const isHost = network.id === hostId;
     startBtn.classList.toggle("hidden", !isHost);
     hostOptions.classList.toggle("hidden", !isHost);
     waitingMsg.classList.toggle("hidden", isHost);
