@@ -2,7 +2,31 @@
 
 Multiplayer browser party game — 2-11 players split into two teams, throw snowballs until one side is eliminated. No login, no auth, just enter a name and play.
 
-**Live:** https://snowball-fight-production-25e4.up.railway.app/
+## Screens
+
+### Lobby
+
+![lobby](./readme-assets/lobby.png)
+
+### Gameplay
+
+![gameplay](./readme-assets/gameplay.gif)
+
+### Eliminated spectator
+
+![eliminated-spectator](./readme-assets/spectating.png)
+
+### End Screen
+
+![end](./readme-assets/end-screen.png)
+
+### Profiling
+
+![profiling](./readme-assets/profiling.png)
+
+### Spectator for stress testing
+
+![spectator-testing](./readme-assets/spectator-screen.gif)
 
 ## Quick Start
 
@@ -18,6 +42,8 @@ bun --watch run server.js
 ```
 
 ## How to Play
+
+**Host name:** The intended host must join with the name `alan` (case-insensitive) to ensure they receive host controls. The server gives this name host priority, including when spectating. If no player uses this name, the server retains the current host or assigns an available player.
 
 1. Open the URL, enter a name, join the lobby
 2. Host clicks "Start Game" (need 2+ players)
