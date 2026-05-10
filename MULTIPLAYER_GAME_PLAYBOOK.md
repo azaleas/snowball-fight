@@ -592,6 +592,129 @@ No HMR, no hot reload for client — just refresh the browser. Server restart wi
 
 ---
 
+## Dev UI Mode (Tuning Playground)
+
+When building a game, you'll spend a lot of time tweaking numeric values — player speed, projectile velocity, cooldown duration, gravity, knockback force, etc. Guessing values and restarting is slow. Instead, build a **Dev UI mode** that exposes live controls for tuning these values in real-time.
+
+### When to Use
+
+Only available in dev/stress mode (never in production). Activate via query param `?dev=true` or a keyboard shortcut (e.g., `Ctrl+Shift+D`).
+
+### What It Looks Like
+
+A collapsible panel (sidebar or overlay) with sliders, number inputs, and dropdowns for every tunable game constant. Changes apply instantly — no restart, no refresh.
+
+```
+┌─── Dev Tuning Panel ───────────────────┐
+│ Player Speed        [====●====] 4.2    │
+│ Projectile Speed    [======●==] 8.0    │
+│ Fire Cooldown (ms)  [==●======] 300    │
+│ Knockback Force     [===●=====] 2.5    │
+│ Gravity             [●========] 0.1    │
+│ Arena Width         [=======●=] 1200   │
+│ Respawn Delay (ms)  [====●====] 3000   │
+│                                        │
+│ [Reset All to Defaults] [Copy Config]  │
+└────────────────────────────────────────┘
+```
+
+### Implementation Pattern
+
+1. **Centralize all tunables in `constants.js`** — every numeric game value lives here with a default:
+
+   ```js
+   export const DEFAULTS = {
+     PLAYER_SPEED: 4,
+     PROJECTILE_SPEED: 8,
+     FIRE_COOLDOWN: 500,
+     KNOCKBACK: 2.0,
+     GRAVITY: 0.0,
+   };
+   export const config = { ...DEFAULTS };
+   ```
+
+2. **Dev panel reads from and writes to `config`** — the game loop already references `config.PLAYER_SPEED` etc., so changes take effect on the next tick/frame.
+
+3. **Generate controls from config keys** — loop over `DEFAULTS`, create a slider + number input for each:
+
+   ```js
+   function buildDevPanel() {
+     const panel = document.createElement('div');
+     panel.id = 'dev-panel';
+     for (const [key, defaultVal] of Object.entries(DEFAULTS)) {
+       const row = createSliderRow(key, defaultVal, (newVal) => {
+         config[key] = newVal;
+         socket.emit('dev-config-update', { key, value: newVal });
+       });
+       panel.appendChild(row);
+     }
+     document.body.appendChild(panel);
+   }
+   ```
+
+4. **Server must accept config updates in dev mode** — when the server receives `dev-config-update`, it updates its own config object so authoritative simulation uses the new value:
+
+   ```js
+   if (DEV_MODE) {
+     socket.on('dev-config-update', ({ key, value }) => {
+       if (key in config) config[key] = value;
+     });
+   }
+   ```
+
+5. **"Copy Config" button** — exports current tuned values as a JSON snippet or a `constants.js` block you can paste directly into your source:
+
+   ```js
+   function copyConfig() {
+     const output = Object.entries(config)
+       .map(([k, v]) => `  ${k}: ${v},`)
+       .join('\n');
+     navigator.clipboard.writeText(`{\n${output}\n}`);
+   }
+   ```
+
+### Key Rules
+
+- **Dev mode only** — gate behind `DEV_MODE` flag (env var or query param). Never ship to players.
+- **Server + client sync** — if you change speed on the dev panel, both the client prediction (if any) and the server simulation must update. Emit the change to the server.
+- **Reset button** — one click restores all values to `DEFAULTS`. Essential when you've tuned yourself into a broken state.
+- **Persist across refresh** — save current tuning to localStorage so you don't lose 20 minutes of slider tweaking on an accidental refresh.
+- **Range hints** — each slider should have sensible min/max/step derived from the default (e.g., speed 0–20 step 0.1, cooldown 50–5000 step 50).
+
+### Workflow
+
+1. Start game in dev mode: `bun run server.js` + open `?dev=true`
+2. Play the game while adjusting sliders — feel the difference immediately
+3. Once values feel right, click "Copy Config"
+4. Paste into `constants.js` as the new defaults
+5. Remove `?dev=true`, test with final values
+
+This eliminates the guess-restart-test loop and lets you find granular values through direct experimentation.
+
+---
+
+## Finalization Checklist
+
+### Create CLAUDE.md from Game Plan + Playbook
+
+Once the game plan (PLAN.md) is finalized and you're ready to start implementation:
+
+> **Reminder:** Generate a `CLAUDE.md` file that combines the game-specific plan with relevant playbook patterns into a single implementation guide.
+
+The CLAUDE.md should include:
+
+- Project-specific tech decisions (from PLAN.md)
+- Relevant architecture patterns (from this playbook)
+- File structure with descriptions
+- Key constants and their values
+- Implementation order / phasing
+- Game-specific gotchas and constraints
+- Commands to run (dev, test, deploy)
+
+This gives the AI assistant (or any developer) a single source of truth for the project without needing to cross-reference multiple documents during implementation.
+
+---
+
 ## What NOT to Do
 
 - Don't use Express — `@socket.io/bun-engine` with Bun's native serve is enough and uses less memory
